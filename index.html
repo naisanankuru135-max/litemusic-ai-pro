@@ -1396,11 +1396,72 @@
     }
   }
 
-  function startBridgeImport(bridgeHost) {
-    const cleanHost = bridgeHost.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  async function startBridgeImport(bridgeHost) {
+    const cleanHost = bridgeHost.trim().replace(/\/.*$/, '');
     const btn = document.getElementById('syncFromPcBtn');
+    const bar = document.getElementById('pcSyncBar');
+
+    // If bridgeHost is an HTTPS tunnel (or domain without port), fetch directly over HTTPS!
+    const isHttpsTunnel = cleanHost.startsWith('https://') || (!cleanHost.includes(':') && cleanHost.includes('.'));
+    if (isHttpsTunnel) {
+      const baseUrl = cleanHost.startsWith('http') ? cleanHost : `https://${cleanHost}`;
+      try {
+        btn.textContent = '📲 PCに接続しています...';
+        btn.disabled = true;
+        const res = await fetch(`${baseUrl}/api/info`);
+        const info = await res.json();
+        const files = (info.convertedFiles || []).filter(f => !f.name.endsWith('.html'));
+        if (!files.length) {
+          btn.textContent = 'PC側に曲がありません';
+          btn.disabled = false;
+          return;
+        }
+        const persist = document.getElementById('persistCheckbox').checked;
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          btn.textContent = `📥 外出先モードで受信中... (${i + 1} / ${files.length}曲)`;
+          const id = f.name + '_' + f.size;
+          if (tracks.some(t => t.id === id)) continue;
+          const audioRes = await fetch(`${baseUrl}${f.url}`);
+          const blob = await audioRes.blob();
+          const meta = await parseID3Metadata(blob, f.name);
+          const prof = await analyzeAudioBlob(blob, meta.title);
+          const trackObj = {
+            id,
+            name: meta.title,
+            artist: meta.artist,
+            coverUrl: meta.coverUrl,
+            size: blob.size,
+            url: URL.createObjectURL(blob),
+            blob: persist ? blob : null,
+            cached: persist,
+            fav: false,
+            plays: 0,
+            lyrics: meta.lyrics || '',
+            bpm: prof.bpm,
+            energy: prof.energy,
+            mood: prof.mood,
+            addedAt: Date.now()
+          };
+          if (persist) await saveTrackToDB(trackObj);
+          tracks.push(trackObj);
+          updateCountsAndStorage();
+          renderPlaylist();
+        }
+        document.getElementById('statusBanner').textContent = `🎉 全 ${files.length} 曲の取り込み完了！オフラインで聴けます`;
+        btn.textContent = `✅ 全 ${files.length} 曲の受信が完了しました！`;
+        setTimeout(() => { if (bar) bar.style.display = 'none'; }, 3000);
+        if (!currentTrackId && tracks.length > 0) playTrackById(tracks[0].id);
+      } catch (err) {
+        btn.textContent = '⚠️ 接続エラー（もう一度タップして再試行）';
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    const plainHost = cleanHost.replace(/^https?:\/\//, '');
     btn.textContent = '📲 PCから曲を転送中...';
-    window.open(`http://${cleanHost}/bridge`, '_blank');
+    window.open(`http://${plainHost}/bridge`, '_blank');
   }
 
   window.addEventListener('message', async (e) => {
