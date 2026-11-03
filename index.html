@@ -841,12 +841,54 @@
 </div>
 
 <!-- File Inputs -->
-<input type="file" id="fileInput" accept="audio/*,.mp3,.ogg,.opus,.m4a,.wav,.flac" multiple style="display:none">
+<input type="file" id="fileInput" accept="audio/*,.mp3,.ogg,.opus,.m4a,.wav,.flac,.zip" multiple style="display:none">
+<!-- driveFileInput uses */* so Android SAF file picker always enables Google Drive in the side menu and allows picking .mp3 or .zip directly from Drive -->
+<input type="file" id="driveFileInput" accept="*/*" multiple style="display:none">
 <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
 
-<div class="action-bar">
-  <button id="addFilesBtn" class="action-btn primary">＋ 曲ファイルを追加</button>
-  <button id="addFolderBtn" class="action-btn">📂 フォルダごと一括追加</button>
+<div class="action-bar" style="grid-template-columns: 1fr 1fr 1fr;">
+  <button id="addDriveBtn" class="action-btn primary" style="background:rgba(34,197,94,0.16); border-color:rgba(34,197,94,0.45); color:#4ade80;">
+    ☁️ ドライブから追加
+  </button>
+  <button id="addFilesBtn" class="action-btn primary">＋ 曲ファイル追加</button>
+  <button id="addFolderBtn" class="action-btn">📂 フォルダ追加</button>
+</div>
+
+<!-- Google Drive Guide & Direct Link Modal -->
+<div id="driveModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:100; padding:16px; overflow-y:auto; align-items:center; justify-content:center;">
+  <div style="background:#111827; border:1px solid #4ade80; border-radius:20px; max-width:460px; width:100%; margin:20px auto; padding:20px; box-shadow:0 20px 50px rgba(0,0,0,0.85);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="font-weight:800; font-size:1.02rem; color:#4ade80;">☁️ Googleドライブから曲を追加</div>
+      <button id="closeDriveModalBtn" class="icon-btn" style="font-size:1.2rem;">✕</button>
+    </div>
+
+    <div style="background:#1e293b; border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:12px;">
+      <div style="font-weight:700; font-size:0.88rem; color:#f8fafc; margin-bottom:6px;">
+        方法1：ドライブ内のファイルを直接選ぶ（おすすめ！）
+      </div>
+      <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.55; margin-bottom:12px;">
+        ① 下の緑色のボタンを押すとスマホのファイル選択画面が開きます。<br>
+        ② 画面左上の<strong>「≡」メニュー →「ドライブ（Google ドライブ）」→「マイドライブ」→「LiteMusic_23曲」</strong>を開きます。<br>
+        ③ 中にある <strong><code>00_全23曲一括読込パック.zip</code></strong> を<strong>1個選ぶだけ</strong>で、23曲すべてが一気に自動解凍＆オフライン保存されます！（もちろん曲を1曲ずつ選んでもOKです）
+      </div>
+      <button id="openDrivePickerBtn" class="action-btn" style="width:100%; background:#16a34a; border-color:#4ade80; color:#fff; padding:12px; font-size:0.9rem;">
+        ☁️ Googleドライブを開いて曲 / ZIPを選ぶ
+      </button>
+    </div>
+
+    <div style="background:#1e293b; border:1px solid var(--border); border-radius:14px; padding:14px;">
+      <div style="font-weight:700; font-size:0.86rem; color:#38bdf8; margin-bottom:6px;">
+        方法2：Googleドライブの共有リンク（URL）から追加
+      </div>
+      <div style="font-size:0.75rem; color:var(--muted); margin-bottom:8px;">
+        Googleドライブで「リンクを知っている全員」に共有した曲やZIPのURLを貼り付けて取り込むこともできます。
+      </div>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="driveUrlInput" class="ai-input" placeholder="https://drive.google.com/file/d/...">
+        <button id="importDriveUrlBtn" class="ai-go-btn">読込</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="pcSyncBar" class="action-bar" style="display:none; grid-template-columns: 1fr;">
@@ -1532,17 +1574,79 @@
     document.getElementById('cntFav').textContent = tracks.filter(t => t.fav).length;
   }
 
+  // Built-in Zero-Dependency ZIP Extractor (supports Store & Deflate + UTF-8 filenames)
+  async function extractAudioFromZip(zipFile) {
+    const extracted = [];
+    try {
+      const buf = await zipFile.arrayBuffer();
+      const view = new DataView(buf);
+      let offset = 0;
+      while (offset + 30 <= buf.byteLength) {
+        const sig = view.getUint32(offset, true);
+        if (sig !== 0x04034b50) break; // Local file header signature
+        const flags = view.getUint16(offset + 6, true);
+        const method = view.getUint16(offset + 8, true);
+        const compSize = view.getUint32(offset + 18, true);
+        const nameLen = view.getUint16(offset + 26, true);
+        const extraLen = view.getUint16(offset + 28, true);
+
+        const nameBytes = new Uint8Array(buf, offset + 30, nameLen);
+        const isUtf8 = (flags & 0x0800) !== 0;
+        const rawName = new TextDecoder(isUtf8 ? 'utf-8' : 'shift-jis').decode(nameBytes);
+        const dataStart = offset + 30 + nameLen + extraLen;
+        const dataEnd = dataStart + compSize;
+        if (dataEnd > buf.byteLength) break;
+
+        const cleanName = rawName.split('/').pop();
+        if (cleanName && !cleanName.startsWith('.') && /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(cleanName)) {
+          const slice = buf.slice(dataStart, dataEnd);
+          let fileBlob = null;
+          const ext = cleanName.split('.').pop().toLowerCase();
+          const mime = (ext === 'ogg' || ext === 'opus') ? 'audio/ogg' : 'audio/mpeg';
+
+          if (method === 0) {
+            fileBlob = new Blob([slice], { type: mime });
+          } else if (method === 8 && typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('deflate-raw');
+            const stream = new Blob([slice]).stream().pipeThrough(ds);
+            fileBlob = await new Response(stream).blob();
+            fileBlob = new Blob([fileBlob], { type: mime });
+          }
+          if (fileBlob) {
+            extracted.push(new File([fileBlob], cleanName, { type: mime }));
+          }
+        }
+        offset = dataEnd;
+      }
+    } catch (e) {
+      console.warn('ZIP extract error:', e);
+    }
+    return extracted;
+  }
+
   async function handleFiles(fileList) {
     const persist = document.getElementById('persistCheckbox').checked;
-    const audioFiles = Array.from(fileList).filter(f =>
-      f.type.startsWith('audio/') || /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(f.name)
-    );
+    const rawFiles = Array.from(fileList || []);
+    const audioFiles = [];
+
+    for (const f of rawFiles) {
+      if (/\.zip$/i.test(f.name) || f.type === 'application/zip' || f.type === 'application/x-zip-compressed') {
+        document.getElementById('statusBanner').textContent = `📦 ZIPパック「${f.name}」を展開中...`;
+        const unpacked = await extractAudioFromZip(f);
+        audioFiles.push(...unpacked);
+      } else if (f.type.startsWith('audio/') || /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(f.name)) {
+        audioFiles.push(f);
+      }
+    }
     if (!audioFiles.length) return;
 
-    for (const file of audioFiles) {
+    let added = 0;
+    for (let i = 0; i < audioFiles.length; i++) {
+      const file = audioFiles[i];
       const id = file.name + '_' + file.size;
       if (tracks.some(t => t.id === id)) continue;
 
+      document.getElementById('statusBanner').textContent = `📥 曲を読み込み中... (${i + 1} / ${audioFiles.length}曲)`;
       const meta = await parseID3Metadata(file, file.name);
       const prof = await analyzeAudioBlob(file, meta.title);
       const trackObj = {
@@ -1564,9 +1668,11 @@
       };
       if (persist) await saveTrackToDB(trackObj);
       tracks.push(trackObj);
+      added++;
+      updateCountsAndStorage();
+      renderPlaylist();
     }
-    updateCountsAndStorage();
-    renderPlaylist();
+    document.getElementById('statusBanner').textContent = added > 0 ? `🎉 ${added} 曲を追加しました！` : 'すでに追加済みの曲です';
     if (!currentTrackId && tracks.length > 0) {
       playTrackById(tracks[0].id);
     }
@@ -2294,6 +2400,41 @@
   document.getElementById('addFolderBtn').onclick = () => document.getElementById('folderInput').click();
   document.getElementById('fileInput').onchange = (e) => handleFiles(e.target.files);
   document.getElementById('folderInput').onchange = (e) => handleFiles(e.target.files);
+
+  // Google Drive Modal & Picker Handlers
+  const driveModal = document.getElementById('driveModal');
+  document.getElementById('addDriveBtn').onclick = () => {
+    driveModal.style.display = 'flex';
+  };
+  document.getElementById('closeDriveModalBtn').onclick = () => {
+    driveModal.style.display = 'none';
+  };
+  document.getElementById('openDrivePickerBtn').onclick = () => {
+    driveModal.style.display = 'none';
+    document.getElementById('driveFileInput').click();
+  };
+  document.getElementById('driveFileInput').onchange = (e) => handleFiles(e.target.files);
+
+  document.getElementById('importDriveUrlBtn').onclick = async () => {
+    const rawUrl = document.getElementById('driveUrlInput').value.trim();
+    if (!rawUrl) return;
+    const m = rawUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) || rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const directUrl = m ? `https://drive.google.com/uc?export=download&id=${m[1]}` : rawUrl;
+    const btn = document.getElementById('importDriveUrlBtn');
+    btn.textContent = '読込中...';
+    try {
+      const res = await fetch(directUrl);
+      if (!res.ok) throw new Error('Direct fetch blocked by CORS');
+      const blob = await res.blob();
+      const name = m ? `DriveTrack_${m[1].slice(0, 6)}.mp3` : 'DriveTrack.mp3';
+      await handleFiles([new File([blob], name, { type: blob.type || 'audio/mpeg' })]);
+      driveModal.style.display = 'none';
+    } catch (e) {
+      alert('Googleドライブのセキュリティ制限によりURL直接取得ができないファイルです。上の緑色の「☁️ Googleドライブを開いて曲 / ZIPを選ぶ」ボタンから直接ファイルを選択してください！');
+    } finally {
+      btn.textContent = '読込';
+    }
+  };
 
   init();
 </script>
