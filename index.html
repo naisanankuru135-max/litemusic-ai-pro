@@ -667,56 +667,8 @@
   <div class="header-right">
     <span id="alarmBadge" style="color:var(--amber); font-weight:700;"></span>
     <span id="storageInfo">保存: 0 MB</span>
-    <button id="openTransferModalBtn" class="eq-pill" style="background:linear-gradient(135deg,#22c55e,#0284c7); color:#fff; border:none; padding:5px 10px;">
-      📲 スマホに入れる
-    </button>
   </div>
 </header>
-
-<!-- Smartphone Transfer Modal -->
-<div id="transferModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:100; padding:16px; overflow-y:auto; align-items:center; justify-content:center;">
-  <div style="background:#111827; border:1px solid var(--accent); border-radius:20px; max-width:480px; width:100%; margin:20px auto; padding:20px; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div style="font-weight:800; font-size:1.05rem; color:var(--accent);">📲 この23曲とLiteMusic AI Proをスマホに入れる</div>
-      <button id="closeTransferModalBtn" class="icon-btn" style="font-size:1.2rem;">✕</button>
-    </div>
-
-    <!-- Method 1: GitHub Pages + Wi-Fi Direct Sync -->
-    <div style="background:#1e293b; border:1px solid rgba(56,189,248,0.4); border-radius:14px; padding:14px; margin-bottom:12px;">
-      <div style="font-weight:700; font-size:0.9rem; color:#4ade80; margin-bottom:6px;">
-        方法1：GitHubアプリ版でQRコードを読み取る（外でも完全オフライン起動！）
-      </div>
-      <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5;">
-        ① スマホのカメラで下のQRコードを読み取り、<strong>GitHub上の専用アプリ (https://...)</strong> をChromeで開く<br>
-        ② スマホ画面の<strong>「📥 PCからWi-Fi経由で曲を取り込む」</strong>を押すと、家のWi-Fi経由でPCからスマホへ全曲が直接転送・オフライン保存されます！<br>
-        ③ Chrome右上の「⋮」→<strong>「ホーム画面に追加（アプリをインストール）」</strong>を押せば、外出先でスマホを再起動しても100%オフラインで開けます！
-      </div>
-      <div id="transferWifiUrls" style="background:#070b14; border:1px solid var(--border); padding:10px; border-radius:10px; font-family:monospace; font-size:0.82rem; color:var(--accent); margin-top:10px; text-align:center; font-weight:700; word-break:break-all;">
-        https://naisanankuru135-max.github.io/litemusic-ai-pro/?pc=192.168.0.13:3456
-      </div>
-      <div id="qrContainer" style="display:flex; justify-content:center; margin-top:10px;"></div>
-    </div>
-
-    <!-- Method 2: USB / Google Drive Folder -->
-    <div style="background:#1e293b; border:1px solid var(--border); border-radius:14px; padding:14px;">
-      <div style="font-weight:700; font-size:0.9rem; color:#38bdf8; margin-bottom:6px;">
-        方法2：USBケーブルやGoogleドライブでスマホに送る
-      </div>
-      <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
-        もしWi-Fiで上記URLが開けない場合は、下のボタンを押すと<strong>「プレイヤー本体ファイル (.html)」と「23曲の音声ファイル」が入ったフォルダ</strong>が開きます。<br>
-        それをそのままUSBケーブルやGoogleドライブでスマホに入れ、スマホで開いて「📂 フォルダごと一括追加」を押すだけで完了です！
-      </div>
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <button id="modalOpenFolderBtn" class="action-btn primary" style="width:100%; padding:12px;">
-          📁 プレイヤー本体＋23曲のフォルダを開く
-        </button>
-        <a href="/download-player" class="action-btn" style="text-decoration:none; width:100%;">
-          ⬇ プレイヤー単体 (LiteMusicPlayer.html) を保存
-        </a>
-      </div>
-    </div>
-  </div>
-</div>
 
 <div class="player-card">
   <!-- Interactive Audio Visualizer & Album Art Stage -->
@@ -893,13 +845,13 @@
 <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
 
 <div class="action-bar">
-  <button id="addFilesBtn" class="action-btn primary">＋ スマホ内の曲を追加</button>
+  <button id="addFilesBtn" class="action-btn primary">＋ 曲ファイルを追加</button>
   <button id="addFolderBtn" class="action-btn">📂 フォルダごと一括追加</button>
 </div>
 
 <div id="pcSyncBar" class="action-bar" style="display:none; grid-template-columns: 1fr;">
   <button id="syncFromPcBtn" class="action-btn" style="border-color:var(--green); color:#4ade80;">
-    📥 PCで軽量化した曲をワンタップで取り込む (<span id="pcCount">0</span>曲)
+    📥 PCから曲を受け取る
   </button>
 </div>
 
@@ -1420,45 +1372,34 @@
     renderCustomPlSelect();
     renderPlaylist();
 
-    // Check URL parameter ?pc=192.168.0.13:3456 for GitHub Pages -> Local PC Wi-Fi Bridge
+    // One-time QR sync session (only shown when opened via QR code with ?sync= token)
     const params = new URLSearchParams(location.search);
-    if (params.get('pc')) {
-      localStorage.setItem('litemusic_pc_host', params.get('pc'));
-    }
-    const savedPcHost = localStorage.getItem('litemusic_pc_host') || '192.168.0.13:3456';
+    const syncToken = params.get('sync') || params.get('pc');
+    if (syncToken) {
+      let bridgeHost = syncToken;
+      try {
+        // Support base64url encoded token so raw IP isn't even visible in the URL
+        if (!syncToken.includes(':') && !syncToken.includes('.')) {
+          bridgeHost = atob(syncToken.replace(/-/g, '+').replace(/_/g, '/'));
+        }
+      } catch (e) {}
+      // Clean URL bar immediately so ?sync=... disappears
+      try {
+        history.replaceState({}, document.title, location.pathname);
+      } catch (e) {}
 
-    if (location.hostname.endsWith('github.io')) {
       const bar = document.getElementById('pcSyncBar');
       const btn = document.getElementById('syncFromPcBtn');
       bar.style.display = 'grid';
-      btn.innerHTML = `📥 PC (${savedPcHost}) からWi-Fi経由で曲を取り込む`;
-      btn.onclick = () => startBridgeImport(savedPcHost);
-    } else if (location.protocol.startsWith('http')) {
-      try {
-        const res = await fetch('/api/info');
-        const info = await res.json();
-        if (info.convertedFiles && info.convertedFiles.length > 0) {
-          const bar = document.getElementById('pcSyncBar');
-          document.getElementById('pcCount').textContent = info.convertedFiles.length;
-          bar.style.display = 'grid';
-          document.getElementById('syncFromPcBtn').onclick = () => importFromPC(info.convertedFiles);
-        }
-      } catch (e) {}
+      btn.textContent = '📥 PCから曲をまとめて受け取る（タップして開始）';
+      btn.onclick = () => startBridgeImport(bridgeHost);
     }
   }
 
-  // Wi-Fi Bridge Receiver for GitHub Pages (HTTPS) <- Local PC (HTTP) via postMessage
-  function startBridgeImport(pcHost) {
-    const host = prompt(
-      '同じWi-Fiにあるパソコンのアドレスを確認してください（そのままOKを押すと転送が始まります）：',
-      pcHost
-    );
-    if (!host || !host.trim()) return;
-    const cleanHost = host.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    localStorage.setItem('litemusic_pc_host', cleanHost);
-
+  function startBridgeImport(bridgeHost) {
+    const cleanHost = bridgeHost.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
     const btn = document.getElementById('syncFromPcBtn');
-    btn.textContent = '📲 PCに接続して曲を転送中...';
+    btn.textContent = '📲 PCから曲を転送中...';
     window.open(`http://${cleanHost}/bridge`, '_blank');
   }
 
@@ -1466,9 +1407,10 @@
     const d = e.data;
     if (!d || typeof d !== 'object') return;
     const btn = document.getElementById('syncFromPcBtn');
+    const bar = document.getElementById('pcSyncBar');
 
     if (d.type === 'LITEMUSIC_START') {
-      if (btn) btn.textContent = `📥 PCから転送中... (0 / ${d.total}曲)`;
+      if (btn) btn.textContent = `📥 転送中... (0 / ${d.total}曲)`;
     } else if (d.type === 'LITEMUSIC_TRACK') {
       try {
         const persist = document.getElementById('persistCheckbox').checked;
@@ -1499,7 +1441,7 @@
           updateCountsAndStorage();
           renderPlaylist();
         }
-        if (btn) btn.textContent = `📥 PCから転送中... (${d.index} / ${d.total}曲)`;
+        if (btn) btn.textContent = `📥 転送中... (${d.index} / ${d.total}曲)`;
       } catch (err) {
         console.warn('Bridge track import error:', err);
       }
@@ -1507,8 +1449,8 @@
         e.source.postMessage({ type: 'LITEMUSIC_ACK', name: d.name }, '*');
       }
     } else if (d.type === 'LITEMUSIC_DONE') {
-      if (btn) btn.textContent = `✅ PCから全 ${d.total} 曲のオフライン保存が完了しました！`;
-      document.getElementById('statusBanner').textContent = '🎉 PCからの移行完了！外でも完全オフラインで聴けます';
+      document.getElementById('statusBanner').textContent = `🎉 全 ${d.total} 曲の取り込み完了！`;
+      if (bar) setTimeout(() => { bar.style.display = 'none'; }, 3000);
       updateCountsAndStorage();
       renderPlaylist();
       if (!currentTrackId && tracks.length > 0) {
@@ -2286,35 +2228,6 @@
   document.getElementById('addFolderBtn').onclick = () => document.getElementById('folderInput').click();
   document.getElementById('fileInput').onchange = (e) => handleFiles(e.target.files);
   document.getElementById('folderInput').onchange = (e) => handleFiles(e.target.files);
-
-  // Transfer Modal Logic
-  const transferModal = document.getElementById('transferModal');
-  document.getElementById('openTransferModalBtn').onclick = async () => {
-    transferModal.style.display = 'flex';
-    let qrTargetUrl = 'https://naisanankuru135-max.github.io/litemusic-ai-pro/?pc=192.168.0.13:3456';
-    try {
-      const res = await fetch('/api/info');
-      const info = await res.json();
-      if (info.githubQrUrl) {
-        qrTargetUrl = info.githubQrUrl;
-      }
-    } catch (e) {}
-    document.getElementById('transferWifiUrls').innerHTML = `
-      <div style="margin-bottom:4px;"><a href="${qrTargetUrl}" target="_blank" style="color:var(--accent);">${qrTargetUrl}</a></div>
-    `;
-    document.getElementById('qrContainer').innerHTML = `
-      <div style="background:#fff; padding:10px; border-radius:12px; text-align:center;">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(qrTargetUrl)}" alt="QR Code" width="160" height="160" style="display:block;" onerror="this.parentElement.style.display='none'">
-        <div style="color:#0f172a; font-size:0.72rem; font-weight:700; margin-top:4px;">📱 スマホのカメラでスキャン</div>
-      </div>
-    `;
-  };
-  document.getElementById('closeTransferModalBtn').onclick = () => {
-    transferModal.style.display = 'none';
-  };
-  document.getElementById('modalOpenFolderBtn').onclick = async () => {
-    await fetch('/api/open-folder', { method: 'POST' });
-  };
 
   init();
 </script>
