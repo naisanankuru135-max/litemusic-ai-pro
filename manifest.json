@@ -1,0 +1,24 @@
+{
+  "name": "LiteMusic AI Pro",
+  "short_name": "LiteMusic",
+  "description": "超軽量・広告なし・完全オフライン＆バックグラウンド対応のAI音楽プレイヤー",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='42' fill='%23070b14'/%3E%3Ccircle cx='96' cy='96' r='64' fill='%231e293b' stroke='%2338bdf8' stroke-width='6'/%3E%3Cpath d='M82 64v52a16 16 0 1 1-10-15V56l48-10v58a16 16 0 1 1-10-15V60L82 66z' fill='%2338bdf8'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='110' fill='%23070b14'/%3E%3Ccircle cx='256' cy='256' r='170' fill='%231e293b' stroke='%2338bdf8' stroke-width='16'/%3E%3Cpath d='M218 170v138a42 42 0 1 1-26-40V148l128-26v154a42 42 0 1 1-26-40V160l-76 16z' fill='%2338bdf8'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
