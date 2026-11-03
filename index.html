@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b1120">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.json">
+<title>LiteMusic AI Pro - 超軽量オフライン音楽プレイヤー</title>
+<style>
+  :root {
+    --bg: #070b14;
+    --surface: #111827;
+    --surface-2: #1e293b;
+    --surface-3: #334155;
+    --border: rgba(148, 163, 184, 0.18);
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-2: #a855f7;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --danger: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    max-width: 560px;
+    margin: 0 auto;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding-bottom: 40px;
+  }
+
+  /* Header */
+  header {
+    padding: 12px 16px;
+    background: rgba(7, 11, 20, 0.92);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(12px);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    font-size: 1.02rem;
+    background: linear-gradient(90deg, #38bdf8, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .badge-pro {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(168, 85, 247, 0.2);
+    color: #d8b4fe;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    font-weight: 700;
+    -webkit-text-fill-color: #d8b4fe;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.74rem;
+    color: var(--muted);
+  }
+
+  /* Main Player Card */
+  .player-card {
+    background: linear-gradient(165deg, #162032 0%, #0b1120 100%);
+    margin: 12px 12px 8px;
+    padding: 16px;
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Visualizer & Album Art Stage */
+  .stage-wrap {
+    position: relative;
+    height: 150px;
+    background: rgba(7, 11, 20, 0.75);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  #vizCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+  .stage-overlay {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 0 16px;
+    pointer-events: none;
+  }
+  .album-art {
+    width: 76px;
+    height: 76px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #0284c7, #7e22ce);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    flex-shrink: 0;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    border: 2px solid rgba(255,255,255,0.15);
+    background-size: cover;
+    background-position: center;
+    transition: transform 0.3s ease;
+  }
+  .album-art.playing {
+    animation: floatPulse 3s ease-in-out infinite;
+  }
+  @keyframes floatPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  .stage-info {
+    overflow: hidden;
+    flex: 1;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  }
+  .now-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .now-artist {
+    font-size: 0.8rem;
+    color: #cbd5e1;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ai-tags-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .ai-tag {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(56, 189, 248, 0.2);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    color: #7dd3fc;
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .viz-mode-hint {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 3;
+    font-size: 0.68rem;
+    color: var(--muted);
+    background: rgba(0,0,0,0.55);
+    padding: 2px 8px;
+    border-radius: 99px;
+    pointer-events: none;
+  }
+  .fav-main-btn {
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    font-size: 1.15rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .fav-main-btn.favorited {
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.5);
+  }
+
+  /* Lyrics Overlay Drawer inside Stage */
+  .lyrics-box {
+    display: none;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 12px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    text-align: center;
+    color: #e2e8f0;
+  }
+  .lyrics-box.open { display: block; }
+  .lyric-line {
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: 0.2s;
+    color: var(--muted);
+  }
+  .lyric-line.active {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 0.95rem;
+    background: rgba(56, 189, 248, 0.1);
+  }
+
+  /* Seek Bar */
+  .seek-container { margin: 6px 0 10px; }
+  .seek-slider {
+    width: 100%;
+    height: 6px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .time-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  /* Primary Transport Controls */
+  .main-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0 12px;
+  }
+  .ctrl-btn {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 1.1rem;
+    padding: 8px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .ctrl-btn:active { background: rgba(255,255,255,0.1); }
+  .ctrl-btn.active-mode {
+    color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+  }
+  .play-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #60a5fa);
+    color: #070b14;
+    border: none;
+    font-size: 1.45rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(56, 189, 248, 0.4);
+  }
+
+  /* Feature Tool Drawer Buttons */
+  .feature-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .feat-btn {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 7px 4px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    transition: 0.15s;
+  }
+  .feat-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+  }
+
+  /* Expandable Feature Panels (EQ, AI DJ, Alarm, Lyrics) */
+  .drawer-panel {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin: 0 12px 10px;
+    padding: 14px;
+    animation: fadeIn 0.18s ease;
+  }
+  .drawer-panel.open { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .drawer-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Equalizer UI */
+  .eq-presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .eq-pill {
+    padding: 5px 10px;
+    border-radius: 99px;
+    font-size: 0.73rem;
+    font-weight: 600;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .eq-pill.active {
+    background: var(--accent);
+    color: #070b14;
+    border-color: var(--accent);
+  }
+  .eq-sliders {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    text-align: center;
+  }
+  .eq-band {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .eq-band input[type="range"] {
+    writing-mode: bt-lr;
+    -webkit-appearance: slider-vertical;
+    width: 24px;
+    height: 85px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .eq-label {
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+  .eq-val {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* AI DJ Panel */
+  .ai-prompt-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .ai-card-btn {
+    background: var(--surface-2);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .ai-card-btn:hover {
+    background: rgba(168, 85, 247, 0.18);
+    border-color: #c084fc;
+  }
+  .ai-chat-row {
+    display: flex;
+    gap: 6px;
+  }
+  .ai-input {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #070b14;
+    color: var(--text);
+    font-size: 0.82rem;
+  }
+  .ai-go-btn {
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, #a855f7, #38bdf8);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .ai-response-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    font-size: 0.78rem;
+    color: #e9d5ff;
+    display: none;
+  }
+
+  /* Alarm & Timer Panel */
+  .timer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .timer-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+  }
+  .alarm-input {
+    background: #070b14;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    width: 100%;
+    margin: 6px 0;
+  }
+
+  /* File Add & Sync Bar */
+  .action-bar {
+    padding: 0 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .action-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .action-btn.primary {
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: var(--accent);
+  }
+
+  /* Library Navigation Tabs */
+  .lib-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 0 12px;
+    margin-bottom: 8px;
+  }
+  .lib-tab {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 4px;
+    border-radius: 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+  }
+  .lib-tab.active {
+    background: var(--surface-2);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* Filter & Sort Toolbar */
+  .toolbar-wrap {
+    padding: 0 12px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .search-input {
+    flex: 1;
+    padding: 8px 11px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.82rem;
+  }
+  .sort-select {
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  /* Custom Playlist Selector Bar */
+  .custom-pl-bar {
+    display: none;
+    padding: 0 12px 8px;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .custom-pl-bar.show { display: flex; }
+
+  /* Song List */
+  .playlist-wrap {
+    flex: 1;
+    padding: 0 12px 24px;
+  }
+  .song-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .song-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: 0.12s;
+  }
+  .song-item.active {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+  }
+  .rank-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .rank-1 { background: #facc15; color: #000; }
+  .rank-2 { background: #cbd5e1; color: #000; }
+  .rank-3 { background: #d97706; color: #fff; }
+
+  .song-left {
+    overflow: hidden;
+    flex: 1;
+  }
+  .song-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .song-sub {
+    font-size: 0.71rem;
+    color: var(--muted);
+    margin-top: 2px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .song-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 5px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  .icon-btn.fav-on { color: #facc15; }
+
+  .empty-state {
+    text-align: center;
+    padding: 28px 16px;
+    color: var(--muted);
+    font-size: 0.84rem;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span>🎧 LiteMusic AI Pro</span>
+    <span class="badge-pro">完全オフライン対応</span>
+  </div>
+  <div class="header-right">
+    <span id="alarmBadge" style="color:var(--amber); font-weight:700;"></span>
+    <span id="storageInfo">保存: 0 MB</span>
+    <button id="openTransferModalBtn" class="eq-pill" style="background:linear-gradient(135deg,#22c55e,#0284c7); color:#fff; border:none; padding:5px 10px;">
+      📲 スマホに入れる
+    </button>
+  </div>
+</header>
+
+<!-- Smartphone Transfer Modal -->
+<div id="transferModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82); z-index:100; padding:16px; overflow-y:auto; align-items:center; justify-content:center;">
+  <div style="background:#111827; border:1px solid var(--accent); border-radius:20px; max-width:480px; width:100%; margin:20px auto; padding:20px; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="font-weight:800; font-size:1.05rem; color:var(--accent);">📲 この23曲とLiteMusic AI Proをスマホに入れる</div>
+      <button id="closeTransferModalBtn" class="icon-btn" style="font-size:1.2rem;">✕</button>
+    </div>
+
+    <!-- Method 1: GitHub Pages + Wi-Fi Direct Sync -->
+    <div style="background:#1e293b; border:1px solid rgba(56,189,248,0.4); border-radius:14px; padding:14px; margin-bottom:12px;">
+      <div style="font-weight:700; font-size:0.9rem; color:#4ade80; margin-bottom:6px;">
+        方法1：GitHubアプリ版でQRコードを読み取る（外でも完全オフライン起動！）
+      </div>
+      <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5;">
+        ① スマホのカメラで下のQRコードを読み取り、<strong>GitHub上の専用アプリ (https://...)</strong> をChromeで開く<br>
+        ② スマホ画面の<strong>「📥 PCからWi-Fi経由で曲を取り込む」</strong>を押すと、家のWi-Fi経由でPCからスマホへ全曲が直接転送・オフライン保存されます！<br>
+        ③ Chrome右上の「⋮」→<strong>「ホーム画面に追加（アプリをインストール）」</strong>を押せば、外出先でスマホを再起動しても100%オフラインで開けます！
+      </div>
+      <div id="transferWifiUrls" style="background:#070b14; border:1px solid var(--border); padding:10px; border-radius:10px; font-family:monospace; font-size:0.82rem; color:var(--accent); margin-top:10px; text-align:center; font-weight:700; word-break:break-all;">
+        https://naisanankuru135-max.github.io/litemusic-ai-pro/?pc=192.168.0.13:3456
+      </div>
+      <div id="qrContainer" style="display:flex; justify-content:center; margin-top:10px;"></div>
+    </div>
+
+    <!-- Method 2: USB / Google Drive Folder -->
+    <div style="background:#1e293b; border:1px solid var(--border); border-radius:14px; padding:14px;">
+      <div style="font-weight:700; font-size:0.9rem; color:#38bdf8; margin-bottom:6px;">
+        方法2：USBケーブルやGoogleドライブでスマホに送る
+      </div>
+      <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+        もしWi-Fiで上記URLが開けない場合は、下のボタンを押すと<strong>「プレイヤー本体ファイル (.html)」と「23曲の音声ファイル」が入ったフォルダ</strong>が開きます。<br>
+        それをそのままUSBケーブルやGoogleドライブでスマホに入れ、スマホで開いて「📂 フォルダごと一括追加」を押すだけで完了です！
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button id="modalOpenFolderBtn" class="action-btn primary" style="width:100%; padding:12px;">
+          📁 プレイヤー本体＋23曲のフォルダを開く
+        </button>
+        <a href="/download-player" class="action-btn" style="text-decoration:none; width:100%;">
+          ⬇ プレイヤー単体 (LiteMusicPlayer.html) を保存
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="player-card">
+  <!-- Interactive Audio Visualizer & Album Art Stage -->
+  <div class="stage-wrap" id="vizStage" title="タップで波形デザイン切替">
+    <canvas id="vizCanvas" width="500" height="150"></canvas>
+    <div class="viz-mode-hint" id="vizModeLabel">🌈 タップで波形切替: スペクトラム</div>
+    <div class="stage-overlay">
+      <div id="albumArt" class="album-art">🎵</div>
+      <div class="stage-info">
+        <div id="nowTitle" class="now-title">曲を選択または追加してください</div>
+        <div id="nowArtist" class="now-artist">オフライン・バックグラウンド・AI解析対応</div>
+        <div id="aiTagsRow" class="ai-tags-row">
+          <span class="ai-tag">🎛 5バンドEQ</span>
+          <span class="ai-tag">🤖 AI選曲</span>
+          <span class="ai-tag">⏰ アラーム</span>
+        </div>
+      </div>
+      <button id="favMainBtn" class="fav-main-btn" title="お気に入り登録">☆</button>
+    </div>
+  </div>
+
+  <!-- Lyrics Display / Editor Box -->
+  <div id="lyricsBox" class="lyrics-box">
+    <div id="lyricsContent">歌詞データがありません。「✏️ 歌詞を編集 / LRC読込」から登録するとここに表示されます。</div>
+    <div style="margin-top:8px; display:flex; justify-content:center; gap:8px;">
+      <button id="editLyricsBtn" class="eq-pill">✏️ 歌詞を入力 / 編集</button>
+      <button id="loadLrcBtn" class="eq-pill">📄 .lrc歌詞ファイル読込</button>
+      <input type="file" id="lrcFileInput" accept=".lrc,.txt" style="display:none">
+    </div>
+  </div>
+
+  <!-- Seek Bar -->
+  <div class="seek-container">
+    <input type="range" id="seekBar" class="seek-slider" min="0" max="100" step="0.1" value="0">
+    <div class="time-labels">
+      <span id="curTime">0:00</span>
+      <span id="statusBanner" style="color:var(--accent); font-weight:600;"></span>
+      <span id="durTime">0:00</span>
+    </div>
+  </div>
+
+  <!-- Transport Controls -->
+  <div class="main-controls">
+    <button id="shuffleBtn" class="ctrl-btn" title="シャッフル">🔀</button>
+    <button id="prevBtn" class="ctrl-btn" title="前の曲">⏮</button>
+    <button id="rewBtn" class="ctrl-btn" title="10秒戻す" style="font-size:0.82rem;">-10s</button>
+    <button id="playBtn" class="play-btn" title="再生 / 一時停止">▶</button>
+    <button id="ffBtn" class="ctrl-btn" title="10秒進める" style="font-size:0.82rem;">+10s</button>
+    <button id="nextBtn" class="ctrl-btn" title="次の曲">⏭</button>
+    <button id="repeatBtn" class="ctrl-btn active-mode" title="リピート切替">🔁</button>
+  </div>
+
+  <!-- Bottom Feature Strip -->
+  <div class="feature-strip">
+    <button class="feat-btn" data-drawer="eqDrawer">
+      <span>🎛</span><span>イコライザー</span>
+    </button>
+    <button class="feat-btn" data-drawer="aiDrawer">
+      <span>🤖</span><span>AI DJ・解析</span>
+    </button>
+    <button class="feat-btn" id="lyricsToggleBtn">
+      <span>📝</span><span>歌詞表示</span>
+    </button>
+    <button class="feat-btn" data-drawer="alarmDrawer">
+      <span>⏰</span><span>アラーム/睡眠</span>
+    </button>
+    <button class="feat-btn" id="speedBtn">
+      <span>⏩</span><span id="speedLabel">速度 1.0x</span>
+    </button>
+  </div>
+</div>
+
+<!-- DRAWER 1: 5-Band Equalizer & Bass Boost -->
+<div id="eqDrawer" class="drawer-panel">
+  <div class="drawer-title">
+    <span>🎛 5バンド・イコライザー ＆ 重低音ブースト</span>
+    <button id="aiAutoEqBtn" class="eq-pill" style="background:linear-gradient(135deg,#a855f7,#38bdf8); color:#fff; border:none;">
+      ✨ AI自動音質最適化
+    </button>
+  </div>
+  <div class="eq-presets" id="eqPresetsRow">
+    <button class="eq-pill active" data-eq="flat">フラット</button>
+    <button class="eq-pill" data-eq="bass">🔥 重低音ブースト</button>
+    <button class="eq-pill" data-eq="vocal">🎤 ボーカル強調</button>
+    <button class="eq-pill" data-eq="clear">💎 圧縮音源クリア化</button>
+    <button class="eq-pill" data-eq="rock">🎸 ロック</button>
+    <button class="eq-pill" data-eq="night">🌙 ナイトモード</button>
+  </div>
+  <div class="eq-sliders">
+    <div class="eq-band">
+      <span class="eq-val" id="eqValBassBoost">+0dB</span>
+      <input type="range" id="eqBassBoost" min="0" max="12" step="1" value="0">
+      <span class="eq-label">重低音</span>
+    </div>
+    <div class="eq-band">
+      <span class="eq-val" id="eqVal0">0dB</span>
+      <input type="range" class="eq-band-slider" data-band="0" min="-12" max="12" step="1" value="0">
+      <span class="eq-label">60Hz</span>
+    </div>
+    <div class="eq-band">
+      <span class="eq-val" id="eqVal1">0dB</span>
+      <input type="range" class="eq-band-slider" data-band="1" min="-12" max="12" step="1" value="0">
+      <span class="eq-label">250Hz</span>
+    </div>
+    <div class="eq-band">
+      <span class="eq-val" id="eqVal2">0dB</span>
+      <input type="range" class="eq-band-slider" data-band="2" min="-12" max="12" step="1" value="0">
+      <span class="eq-label">1kHz</span>
+    </div>
+    <div class="eq-band">
+      <span class="eq-val" id="eqVal3">0dB</span>
+      <input type="range" class="eq-band-slider" data-band="3" min="-12" max="12" step="1" value="0">
+      <span class="eq-label">4kHz</span>
+    </div>
+    <div class="eq-band">
+      <span class="eq-val" id="eqVal4">0dB</span>
+      <input type="range" class="eq-band-slider" data-band="4" min="-12" max="12" step="1" value="0">
+      <span class="eq-label">14kHz</span>
+    </div>
+  </div>
+</div>
+
+<!-- DRAWER 2: On-Device AI DJ & Acoustic Mood Sorter -->
+<div id="aiDrawer" class="drawer-panel">
+  <div class="drawer-title">
+    <span>🤖 オフライン音響AI DJ（通信量ゼロ）</span>
+    <span style="font-size:0.72rem; color:var(--muted);">曲の波形・BPM・再生履歴を自動解析</span>
+  </div>
+  <div class="ai-prompt-grid">
+    <button class="ai-card-btn" data-ai="energetic">🔥 テンションが上がる曲順に並び替え</button>
+    <button class="ai-card-btn" data-ai="chill">🌙 寝る前・リラックス順に並び替え</button>
+    <button class="ai-card-btn" data-ai="similar">🎯 今聴いている曲と似た雰囲気の曲を集める</button>
+    <button class="ai-card-btn" data-ai="rediscover">💎 あまり聴いていない隠れた名曲を優先</button>
+  </div>
+  <div class="ai-chat-row">
+    <input type="text" id="aiCustomInput" class="ai-input" placeholder="気分を入力（例：朝の通勤で元気が出る曲、作業用BGMなど）">
+    <button id="aiAskBtn" class="ai-go-btn">AI選曲</button>
+  </div>
+  <div id="aiResponseBox" class="ai-response-box"></div>
+</div>
+
+<!-- DRAWER 3: Wake-Up Alarm & Sleep Timer -->
+<div id="alarmDrawer" class="drawer-panel">
+  <div class="drawer-title">
+    <span>⏰ 目覚まし音楽アラーム ＆ おやすみタイマー</span>
+  </div>
+  <div class="timer-grid">
+    <div class="timer-card">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--amber);">☀️ 目覚ましアラーム</div>
+      <div style="font-size:0.7rem; color:var(--muted);">指定時刻にフェードインで音楽を再生します</div>
+      <input type="time" id="alarmTimeInput" class="alarm-input" value="07:00">
+      <button id="toggleAlarmBtn" class="eq-pill" style="width:100%; text-align:center;">アラームをONにする</button>
+    </div>
+    <div class="timer-card">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--accent);">🌙 スリープタイマー</div>
+      <div style="font-size:0.7rem; color:var(--muted);">時間になると音量を徐々に下げて停止します</div>
+      <select id="sleepSelect" class="alarm-input">
+        <option value="0">OFF（タイマーなし）</option>
+        <option value="15">15分後に停止</option>
+        <option value="30">30分後に停止</option>
+        <option value="45">45分後に停止</option>
+        <option value="60">60分後に停止</option>
+        <option value="-1">この曲の終わりで停止</option>
+      </select>
+      <button id="clearCacheBtn" class="eq-pill" style="width:100%; text-align:center; color:#f87171; margin-top:2px;">
+        🗑 キャッシュ全削除で容量解放
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- File Inputs -->
+<input type="file" id="fileInput" accept="audio/*,.mp3,.ogg,.opus,.m4a,.wav,.flac" multiple style="display:none">
+<input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+
+<div class="action-bar">
+  <button id="addFilesBtn" class="action-btn primary">＋ スマホ内の曲を追加</button>
+  <button id="addFolderBtn" class="action-btn">📂 フォルダごと一括追加</button>
+</div>
+
+<div id="pcSyncBar" class="action-bar" style="display:none; grid-template-columns: 1fr;">
+  <button id="syncFromPcBtn" class="action-btn" style="border-color:var(--green); color:#4ade80;">
+    📥 PCで軽量化した曲をワンタップで取り込む (<span id="pcCount">0</span>曲)
+  </button>
+</div>
+
+<!-- Library Tabs: All / Favorites / Ranking / Custom Playlists -->
+<div class="lib-tabs">
+  <div class="lib-tab active" data-tab="all">🎵 すべて (<span id="cntAll">0</span>)</div>
+  <div class="lib-tab" data-tab="fav">⭐ お気に入り (<span id="cntFav">0</span>)</div>
+  <div class="lib-tab" data-tab="rank">🏆 ランキング</div>
+  <div class="lib-tab" data-tab="playlist">📁 リスト管理</div>
+</div>
+
+<!-- Custom Playlist Selector Bar -->
+<div id="customPlBar" class="custom-pl-bar">
+  <select id="activePlSelect" class="sort-select" style="flex:1;"></select>
+  <button id="newPlBtn" class="eq-pill">＋ 新規リスト作成</button>
+  <button id="delPlBtn" class="eq-pill" style="color:#f87171;">削除</button>
+</div>
+
+<!-- Search & Sort Toolbar -->
+<div class="toolbar-wrap">
+  <input type="text" id="searchInput" class="search-input" placeholder="🔍 曲名・アーティスト・タグで検索...">
+  <select id="sortSelect" class="sort-select" title="並び替え">
+    <option value="custom">⇅ カスタム順（手動移動可）</option>
+    <option value="name_asc">🔤 曲名順 (A→Z)</option>
+    <option value="plays_desc">🏆 再生回数が多い順</option>
+    <option value="bpm_desc">🔥 テンポ・ノリが良い順</option>
+    <option value="size_asc">🪶 容量が軽い順</option>
+    <option value="added_desc">🕒 追加が新しい順</option>
+  </select>
+</div>
+
+<!-- Save Mode Toggle -->
+<div style="padding: 0 14px 8px; display:flex; justify-content:space-between; align-items:center; font-size:0.74rem; color:var(--muted);">
+  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+    <input type="checkbox" id="persistCheckbox" checked style="accent-color:var(--accent);">
+    <span>追加した曲をアプリ内にオフライン保存する</span>
+  </label>
+  <span id="currentSortHint">▲▼で曲順入替</span>
+</div>
+
+<!-- Song List -->
+<div class="playlist-wrap">
+  <div id="songList" class="song-list"></div>
+</div>
+
+<audio id="audioEl" preload="auto" crossorigin="anonymous"></audio>
+
+<script>
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+  function formatTime(sec) {
+    if (!isFinite(sec) || sec < 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  // Lightweight ID3v2 Parser for MP3 Metadata, Album Art & Lyrics
+  async function parseID3Metadata(blob, fallbackName) {
+    const meta = {
+      title: fallbackName.replace(/\.[^.]+$/, ''),
+      artist: 'ローカル音源',
+      coverUrl: null,
+      lyrics: ''
+    };
+    try {
+      const slice = blob.slice(0, Math.min(blob.size, 350 * 1024));
+      const buf = await slice.arrayBuffer();
+      const view = new DataView(buf);
+      if (buf.byteLength < 10) return meta;
+      // Check "ID3"
+      if (view.getUint8(0) !== 0x49 || view.getUint8(1) !== 0x44 || view.getUint8(2) !== 0x33) {
+        return meta;
+      }
+      const version = view.getUint8(3);
+      const tagSize =
+        ((view.getUint8(6) & 0x7f) << 21) |
+        ((view.getUint8(7) & 0x7f) << 14) |
+        ((view.getUint8(8) & 0x7f) << 7) |
+        (view.getUint8(9) & 0x7f);
+
+      const limit = Math.min(buf.byteLength, tagSize + 10);
+      let offset = 10;
+
+      const decodeText = (bytes) => {
+        if (!bytes.length) return '';
+        const enc = bytes[0];
+        const content = bytes.subarray(1);
+        try {
+          if (enc === 0) return new TextDecoder('shift-jis').decode(content).replace(/\0/g, '').trim();
+          if (enc === 1 || enc === 2) return new TextDecoder('utf-16').decode(content).replace(/\0/g, '').trim();
+          return new TextDecoder('utf-8').decode(content).replace(/\0/g, '').trim();
+        } catch (e) {
+          return new TextDecoder('utf-8').decode(content).replace(/\0/g, '').trim();
+        }
+      };
+
+      while (offset + 10 < limit) {
+        const fId = String.fromCharCode(
+          view.getUint8(offset),
+          view.getUint8(offset + 1),
+          view.getUint8(offset + 2),
+          view.getUint8(offset + 3)
+        );
+        if (!/^[A-Z0-9]{4}$/.test(fId)) break;
+        let fSize = view.getUint32(offset + 4);
+        if (version === 4) {
+          fSize =
+            ((view.getUint8(offset + 4) & 0x7f) << 21) |
+            ((view.getUint8(offset + 5) & 0x7f) << 14) |
+            ((view.getUint8(offset + 6) & 0x7f) << 7) |
+            (view.getUint8(offset + 7) & 0x7f);
+        }
+        if (fSize <= 0 || offset + 10 + fSize > limit) break;
+        const frameBytes = new Uint8Array(buf, offset + 10, fSize);
+
+        if (fId === 'TIT2') {
+          const t = decodeText(frameBytes);
+          if (t) meta.title = t;
+        } else if (fId === 'TPE1') {
+          const a = decodeText(frameBytes);
+          if (a) meta.artist = a;
+        } else if (fId === 'USLT') {
+          // Unsynced lyrics: encoding(1) + lang(3) + descriptor(null-terminated) + lyrics
+          if (frameBytes.length > 5) {
+            const txt = decodeText(frameBytes.subarray(4));
+            if (txt) meta.lyrics = txt;
+          }
+        } else if (fId === 'APIC') {
+          // Extract embedded cover image
+          let i = 1;
+          while (i < frameBytes.length && frameBytes[i] !== 0) i++;
+          const mime = new TextDecoder().decode(frameBytes.subarray(1, i)) || 'image/jpeg';
+          i += 2; // skip null and picture type
+          while (i < frameBytes.length && frameBytes[i] !== 0) i++;
+          i++;
+          if (i < frameBytes.length) {
+            const imgBlob = new Blob([frameBytes.subarray(i)], { type: mime });
+            meta.coverUrl = URL.createObjectURL(imgBlob);
+          }
+        }
+        offset += 10 + fSize;
+      }
+    } catch (e) {}
+    return meta;
+  }
+
+  // Genuine On-Device Web Audio Waveform & Spectrum Analyzer (Zero Cloud / Zero Bloat)
+  async function analyzeAudioBlob(blob, fallbackName) {
+    // Default fallback if browser cannot decode in background
+    let bpm = 115;
+    let energy = 55;
+    let bassRatio = 0.33;
+    let highRatio = 0.25;
+    let mood = '🎵 バランス';
+
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const tempCtx = new Ctx();
+      // Read up to first 1.5MB for fast decoding of intro/chorus
+      const slice = blob.slice(0, Math.min(blob.size, 1500 * 1024));
+      const arrayBuf = await slice.arrayBuffer();
+      const audioBuf = await tempCtx.decodeAudioData(arrayBuf);
+      const raw = audioBuf.getChannelData(0);
+      const sr = audioBuf.sampleRate;
+
+      // 1. Measure real RMS energy (Loudness / Intensity)
+      let sumSq = 0;
+      const step = 4;
+      let count = 0;
+      for (let i = 0; i < raw.length; i += step) {
+        sumSq += raw[i] * raw[i];
+        count++;
+      }
+      const rms = Math.sqrt(sumSq / Math.max(1, count));
+      // Typical music RMS is 0.05 (quiet) to 0.30 (loud mastered)
+      energy = Math.min(99, Math.max(15, Math.round((rms / 0.28) * 100)));
+
+      // 2. Measure Zero-Crossing Rate (ZCR) to estimate brightness / high-frequency content
+      let crossings = 0;
+      for (let i = 1; i < raw.length; i += step) {
+        if ((raw[i] >= 0 && raw[i - step] < 0) || (raw[i] < 0 && raw[i - step] >= 0)) {
+          crossings++;
+        }
+      }
+      const zcr = crossings / Math.max(1, count);
+      highRatio = Math.min(0.6, Math.max(0.1, zcr * 3));
+
+      // 3. Real Onset / Beat Envelope Peak Detection for BPM estimation
+      const windowSize = Math.floor(sr * 0.05); // 50ms energy windows (20Hz envelope)
+      const env = [];
+      for (let i = 0; i + windowSize < raw.length; i += windowSize) {
+        let e = 0;
+        for (let j = 0; j < windowSize; j += 8) {
+          e += Math.abs(raw[i + j]);
+        }
+        env.push(e / (windowSize / 8));
+      }
+
+      // Detect local energy peaks above moving average
+      const peaks = [];
+      for (let i = 2; i < env.length - 2; i++) {
+        const localAvg = (env[i - 2] + env[i - 1] + env[i] + env[i + 1] + env[i + 2]) / 5;
+        if (env[i] > localAvg * 1.22 && env[i] > env[i - 1] && env[i] >= env[i + 1]) {
+          if (peaks.length === 0 || (i - peaks[peaks.length - 1]) >= 6) {
+            peaks.push(i);
+          }
+        }
+      }
+
+      if (peaks.length >= 4) {
+        const intervals = [];
+        for (let i = 1; i < peaks.length; i++) {
+          const sec = (peaks[i] - peaks[i - 1]) * 0.05;
+          let candidateBpm = 60 / sec;
+          while (candidateBpm < 75) candidateBpm *= 2;
+          while (candidateBpm > 175) candidateBpm /= 2;
+          intervals.push(candidateBpm);
+        }
+        intervals.sort((a, b) => a - b);
+        const medianBpm = intervals[Math.floor(intervals.length / 2)];
+        bpm = Math.round(medianBpm);
+      }
+
+      await tempCtx.close();
+    } catch (e) {
+      // Fallback if format partial slice couldn't decode
+    }
+
+    if (bpm >= 128 && energy >= 60) mood = '🔥 アップテンポ';
+    else if (energy <= 45 || bpm <= 95) mood = '🌙 チル・静か';
+    else if (energy >= 72) mood = '⚡ パワフル';
+    else mood = '🌿 メロウ・快適';
+
+    return { bpm, energy, highRatio, bassRatio, mood };
+  }
+
+  // IndexedDB for Offline Storage & Metadata Persistence
+  const DB_NAME = 'LiteMusicProDB';
+  const STORE_TRACKS = 'tracks';
+  let db = null;
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 2);
+      req.onupgradeneeded = (e) => {
+        const d = e.target.result;
+        if (!d.objectStoreNames.contains(STORE_TRACKS)) {
+          d.createObjectStore(STORE_TRACKS, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+      req.onerror = (e) => reject(e);
+    });
+  }
+
+  async function saveTrackToDB(t) {
+    if (!db) await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TRACKS, 'readwrite');
+      tx.objectStore(STORE_TRACKS).put({
+        id: t.id,
+        name: t.name,
+        artist: t.artist,
+        size: t.size,
+        blob: t.blob || null,
+        lyrics: t.lyrics || '',
+        fav: !!t.fav,
+        plays: t.plays || 0,
+        bpm: t.bpm || 120,
+        energy: t.energy || 60,
+        mood: t.mood || '🎵 バランス',
+        addedAt: t.addedAt || Date.now()
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  }
+
+  async function loadTracksFromDB() {
+    if (!db) await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TRACKS, 'readonly');
+      const req = tx.objectStore(STORE_TRACKS).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  }
+
+  async function deleteTrackFromDB(id) {
+    if (!db) await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TRACKS, 'readwrite');
+      tx.objectStore(STORE_TRACKS).delete(id);
+      tx.oncomplete = () => resolve();
+    });
+  }
+
+  async function clearAllDB() {
+    if (!db) await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_TRACKS, 'readwrite');
+      tx.objectStore(STORE_TRACKS).clear();
+      tx.oncomplete = () => resolve();
+    });
+  }
+
+  // App State
+  let tracks = [];
+  let currentTrackId = null;
+  let activeTab = 'all'; // 'all' | 'fav' | 'rank' | 'playlist'
+  let sortMode = 'custom';
+  let isShuffle = false;
+  let repeatMode = 'all'; // 'all' | 'one' | 'off'
+  const speeds = [1.0, 1.25, 1.5, 1.75, 2.0, 0.75];
+  let speedIdx = 0;
+
+  // Custom Playlists in localStorage
+  let playlists = JSON.parse(localStorage.getItem('litemusic_playlists') || '{"作業用BGM":[],"朝テンションUP":[]}');
+  let currentPlName = Object.keys(playlists)[0] || '作業用BGM';
+
+  function savePlaylists() {
+    localStorage.setItem('litemusic_playlists', JSON.stringify(playlists));
+  }
+
+  // Web Audio API (5-Band EQ + Bass Boost + Visualizer Analyzer)
+  const audioEl = document.getElementById('audioEl');
+  let audioCtx = null;
+  let analyser = null;
+  let bassBoostFilter = null;
+  let eqFilters = [];
+  const EQ_FREQS = [60, 250, 1000, 4000, 14000];
+  const EQ_PRESETS = {
+    flat:   { boost: 0, gains: [0, 0, 0, 0, 0] },
+    bass:   { boost: 8, gains: [7, 4, 0, 1, 2] },
+    vocal:  { boost: 1, gains: [-2, 1, 6, 5, 1] },
+    clear:  { boost: 3, gains: [3, 1, -1, 5, 8] },
+    rock:   { boost: 5, gains: [6, 3, -2, 4, 6] },
+    night:  { boost: 2, gains: [3, 2, 0, -3, -5] }
+  };
+
+  function ensureAudioGraph() {
+    if (audioCtx) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return;
+    }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+      const source = audioCtx.createMediaElementSource(audioEl);
+
+      bassBoostFilter = audioCtx.createBiquadFilter();
+      bassBoostFilter.type = 'lowshelf';
+      bassBoostFilter.frequency.value = 95;
+      bassBoostFilter.gain.value = 0;
+
+      eqFilters = EQ_FREQS.map((freq, idx) => {
+        const f = audioCtx.createBiquadFilter();
+        f.type = idx === 0 ? 'lowshelf' : idx === EQ_FREQS.length - 1 ? 'highshelf' : 'peaking';
+        f.frequency.value = freq;
+        f.Q.value = 1.1;
+        f.gain.value = 0;
+        return f;
+      });
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      let prevNode = source;
+      prevNode.connect(bassBoostFilter);
+      prevNode = bassBoostFilter;
+      for (const f of eqFilters) {
+        prevNode.connect(f);
+        prevNode = f;
+      }
+      prevNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    } catch (e) {
+      console.warn('WebAudio fallback:', e);
+    }
+  }
+
+  function applyEqValues(boost, gains) {
+    ensureAudioGraph();
+    document.getElementById('eqBassBoost').value = boost;
+    document.getElementById('eqValBassBoost').textContent = `+${boost}dB`;
+    if (bassBoostFilter) bassBoostFilter.gain.value = boost;
+
+    document.querySelectorAll('.eq-band-slider').forEach((slider, idx) => {
+      const g = gains[idx] || 0;
+      slider.value = g;
+      document.getElementById('eqVal' + idx).textContent = (g > 0 ? '+' : '') + g + 'dB';
+      if (eqFilters[idx]) eqFilters[idx].gain.value = g;
+    });
+  }
+
+  // Visualizer Canvas Loop (3 Modes)
+  const canvas = document.getElementById('vizCanvas');
+  const ctx = canvas.getContext('2d');
+  let vizMode = 0; // 0: Spectrum Bars, 1: Cyber Wave, 2: Pulse Orbs
+  const vizNames = ['スペクトラム', 'サイバー波形', 'ネオンオーブ'];
+
+  document.getElementById('vizStage').addEventListener('click', (e) => {
+    if (e.target.closest('#favMainBtn')) return;
+    vizMode = (vizMode + 1) % 3;
+    document.getElementById('vizModeLabel').textContent = `🌈 タップで波形切替: ${vizNames[vizMode]}`;
+  });
+
+  function drawVisualizer() {
+    requestAnimationFrame(drawVisualizer);
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (!analyser || audioEl.paused) {
+      // Subtle ambient idle wave
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const t = Date.now() * 0.002;
+      for (let x = 0; x < w; x += 8) {
+        const y = h / 2 + Math.sin(x * 0.02 + t) * 8;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      return;
+    }
+
+    const bufLen = analyser.frequencyBinCount;
+    const data = new Uint8Array(bufLen);
+
+    if (vizMode === 0) {
+      analyser.getByteFrequencyData(data);
+      const bars = 42;
+      const barW = (w / bars) - 3;
+      for (let i = 0; i < bars; i++) {
+        const val = data[i];
+        const barH = Math.max(4, (val / 255) * (h * 0.82));
+        const x = i * (barW + 3) + 6;
+        const y = h - barH;
+        const grad = ctx.createLinearGradient(0, y, 0, h);
+        grad.addColorStop(0, '#38bdf8');
+        grad.addColorStop(1, 'rgba(168, 85, 247, 0.25)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y, barW, barH);
+      }
+    } else if (vizMode === 1) {
+      analyser.getByteTimeDomainData(data);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#38bdf8';
+      ctx.beginPath();
+      const slice = w / bufLen;
+      let x = 0;
+      for (let i = 0; i < bufLen; i++) {
+        const v = data[i] / 128.0;
+        const y = (v * h) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += slice;
+      }
+      ctx.stroke();
+    } else {
+      analyser.getByteFrequencyData(data);
+      const bass = (data[1] + data[2] + data[3]) / 3;
+      const mid = (data[12] + data[16] + data[20]) / 3;
+      const high = (data[35] + data[45]) / 2;
+      const circles = [
+        { x: w * 0.22, y: h * 0.5, r: 18 + (bass / 255) * 48, col: 'rgba(56, 189, 248, 0.35)' },
+        { x: w * 0.52, y: h * 0.5, r: 15 + (mid / 255) * 44, col: 'rgba(168, 85, 247, 0.35)' },
+        { x: w * 0.80, y: h * 0.5, r: 12 + (high / 255) * 40, col: 'rgba(34, 197, 94, 0.35)' }
+      ];
+      for (const c of circles) {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+        ctx.fillStyle = c.col;
+        ctx.fill();
+      }
+    }
+  }
+  drawVisualizer();
+
+  // Initialize Tracks & PC Sync
+  async function init() {
+    await openDB();
+    const saved = await loadTracksFromDB();
+    for (const item of saved) {
+      if (item.blob) {
+        const meta = await parseID3Metadata(item.blob, item.name);
+        tracks.push({
+          id: item.id,
+          name: item.name || meta.title,
+          artist: item.artist || meta.artist,
+          coverUrl: meta.coverUrl,
+          size: item.size || item.blob.size,
+          url: URL.createObjectURL(item.blob),
+          blob: item.blob,
+          cached: true,
+          fav: !!item.fav,
+          plays: item.plays || 0,
+          lyrics: item.lyrics || meta.lyrics || '',
+          bpm: item.bpm || 120,
+          energy: item.energy || 65,
+          mood: item.mood || '🎵 バランス',
+          addedAt: item.addedAt || Date.now()
+        });
+      }
+    }
+    updateCountsAndStorage();
+    renderCustomPlSelect();
+    renderPlaylist();
+
+    // Check URL parameter ?pc=192.168.0.13:3456 for GitHub Pages -> Local PC Wi-Fi Bridge
+    const params = new URLSearchParams(location.search);
+    if (params.get('pc')) {
+      localStorage.setItem('litemusic_pc_host', params.get('pc'));
+    }
+    const savedPcHost = localStorage.getItem('litemusic_pc_host') || '192.168.0.13:3456';
+
+    if (location.hostname.endsWith('github.io')) {
+      const bar = document.getElementById('pcSyncBar');
+      const btn = document.getElementById('syncFromPcBtn');
+      bar.style.display = 'grid';
+      btn.innerHTML = `📥 PC (${savedPcHost}) からWi-Fi経由で曲を取り込む`;
+      btn.onclick = () => startBridgeImport(savedPcHost);
+    } else if (location.protocol.startsWith('http')) {
+      try {
+        const res = await fetch('/api/info');
+        const info = await res.json();
+        if (info.convertedFiles && info.convertedFiles.length > 0) {
+          const bar = document.getElementById('pcSyncBar');
+          document.getElementById('pcCount').textContent = info.convertedFiles.length;
+          bar.style.display = 'grid';
+          document.getElementById('syncFromPcBtn').onclick = () => importFromPC(info.convertedFiles);
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Wi-Fi Bridge Receiver for GitHub Pages (HTTPS) <- Local PC (HTTP) via postMessage
+  function startBridgeImport(pcHost) {
+    const host = prompt(
+      '同じWi-Fiにあるパソコンのアドレスを確認してください（そのままOKを押すと転送が始まります）：',
+      pcHost
+    );
+    if (!host || !host.trim()) return;
+    const cleanHost = host.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    localStorage.setItem('litemusic_pc_host', cleanHost);
+
+    const btn = document.getElementById('syncFromPcBtn');
+    btn.textContent = '📲 PCに接続して曲を転送中...';
+    window.open(`http://${cleanHost}/bridge`, '_blank');
+  }
+
+  window.addEventListener('message', async (e) => {
+    const d = e.data;
+    if (!d || typeof d !== 'object') return;
+    const btn = document.getElementById('syncFromPcBtn');
+
+    if (d.type === 'LITEMUSIC_START') {
+      if (btn) btn.textContent = `📥 PCから転送中... (0 / ${d.total}曲)`;
+    } else if (d.type === 'LITEMUSIC_TRACK') {
+      try {
+        const persist = document.getElementById('persistCheckbox').checked;
+        const id = d.name + '_' + d.size;
+        if (!tracks.some(t => t.id === id)) {
+          const blob = new Blob([d.buffer], { type: d.mime || 'audio/mpeg' });
+          const meta = await parseID3Metadata(blob, d.name);
+          const prof = await analyzeAudioBlob(blob, meta.title);
+          const trackObj = {
+            id,
+            name: meta.title,
+            artist: meta.artist,
+            coverUrl: meta.coverUrl,
+            size: blob.size,
+            url: URL.createObjectURL(blob),
+            blob: persist ? blob : null,
+            cached: persist,
+            fav: false,
+            plays: 0,
+            lyrics: meta.lyrics || '',
+            bpm: prof.bpm,
+            energy: prof.energy,
+            mood: prof.mood,
+            addedAt: Date.now()
+          };
+          if (persist) await saveTrackToDB(trackObj);
+          tracks.push(trackObj);
+          updateCountsAndStorage();
+          renderPlaylist();
+        }
+        if (btn) btn.textContent = `📥 PCから転送中... (${d.index} / ${d.total}曲)`;
+      } catch (err) {
+        console.warn('Bridge track import error:', err);
+      }
+      if (e.source) {
+        e.source.postMessage({ type: 'LITEMUSIC_ACK', name: d.name }, '*');
+      }
+    } else if (d.type === 'LITEMUSIC_DONE') {
+      if (btn) btn.textContent = `✅ PCから全 ${d.total} 曲のオフライン保存が完了しました！`;
+      document.getElementById('statusBanner').textContent = '🎉 PCからの移行完了！外でも完全オフラインで聴けます';
+      updateCountsAndStorage();
+      renderPlaylist();
+      if (!currentTrackId && tracks.length > 0) {
+        playTrackById(tracks[0].id);
+      }
+    }
+  });
+
+  function updateCountsAndStorage() {
+    const cachedBytes = tracks.filter(t => t.cached).reduce((acc, t) => acc + (t.size || 0), 0);
+    document.getElementById('storageInfo').textContent = `保存: ${formatBytes(cachedBytes)}`;
+    document.getElementById('cntAll').textContent = tracks.length;
+    document.getElementById('cntFav').textContent = tracks.filter(t => t.fav).length;
+  }
+
+  async function handleFiles(fileList) {
+    const persist = document.getElementById('persistCheckbox').checked;
+    const audioFiles = Array.from(fileList).filter(f =>
+      f.type.startsWith('audio/') || /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(f.name)
+    );
+    if (!audioFiles.length) return;
+
+    for (const file of audioFiles) {
+      const id = file.name + '_' + file.size;
+      if (tracks.some(t => t.id === id)) continue;
+
+      const meta = await parseID3Metadata(file, file.name);
+      const prof = await analyzeAudioBlob(file, meta.title);
+      const trackObj = {
+        id,
+        name: meta.title,
+        artist: meta.artist,
+        coverUrl: meta.coverUrl,
+        size: file.size,
+        url: URL.createObjectURL(file),
+        blob: persist ? file : null,
+        cached: persist,
+        fav: false,
+        plays: 0,
+        lyrics: meta.lyrics || '',
+        bpm: prof.bpm,
+        energy: prof.energy,
+        mood: prof.mood,
+        addedAt: Date.now()
+      };
+      if (persist) await saveTrackToDB(trackObj);
+      tracks.push(trackObj);
+    }
+    updateCountsAndStorage();
+    renderPlaylist();
+    if (!currentTrackId && tracks.length > 0) {
+      playTrackById(tracks[0].id);
+    }
+  }
+
+  async function importFromPC(pcFiles) {
+    const btn = document.getElementById('syncFromPcBtn');
+    const persist = document.getElementById('persistCheckbox').checked;
+    btn.textContent = '📥 取り込み＆AI解析中...';
+    btn.disabled = true;
+
+    for (const f of pcFiles) {
+      const id = f.name + '_' + f.size;
+      if (tracks.some(t => t.id === id)) continue;
+      try {
+        const res = await fetch(f.url);
+        const blob = await res.blob();
+        const meta = await parseID3Metadata(blob, f.name);
+        const prof = await analyzeAudioBlob(blob, meta.title);
+        const trackObj = {
+          id,
+          name: meta.title,
+          artist: meta.artist,
+          coverUrl: meta.coverUrl,
+          size: blob.size,
+          url: URL.createObjectURL(blob),
+          blob: persist ? blob : null,
+          cached: persist,
+          fav: false,
+          plays: 0,
+          lyrics: meta.lyrics || '',
+          bpm: prof.bpm,
+          energy: prof.energy,
+          mood: prof.mood,
+          addedAt: Date.now()
+        };
+        if (persist) await saveTrackToDB(trackObj);
+        tracks.push(trackObj);
+      } catch (e) {}
+    }
+
+    btn.textContent = '✅ PCから取り込み完了！';
+    updateCountsAndStorage();
+    renderPlaylist();
+    if (!currentTrackId && tracks.length > 0) {
+      playTrackById(tracks[0].id);
+    }
+  }
+
+  // Filtering & Sorting
+  function getDisplayedTracks() {
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    let list = [...tracks];
+
+    if (activeTab === 'fav') {
+      list = list.filter(t => t.fav);
+    } else if (activeTab === 'rank') {
+      list.sort((a, b) => (b.plays || 0) - (a.plays || 0));
+    } else if (activeTab === 'playlist') {
+      const ids = playlists[currentPlName] || [];
+      list = ids.map(id => tracks.find(t => t.id === id)).filter(Boolean);
+    }
+
+    if (q) {
+      list = list.filter(t =>
+        t.name.toLowerCase().includes(q) ||
+        (t.artist && t.artist.toLowerCase().includes(q)) ||
+        (t.mood && t.mood.toLowerCase().includes(q))
+      );
+    }
+
+    if (activeTab !== 'rank') {
+      if (sortMode === 'name_asc') list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      else if (sortMode === 'plays_desc') list.sort((a, b) => (b.plays || 0) - (a.plays || 0));
+      else if (sortMode === 'bpm_desc') list.sort((a, b) => (b.bpm || 0) - (a.bpm || 0));
+      else if (sortMode === 'size_asc') list.sort((a, b) => (a.size || 0) - (b.size || 0));
+      else if (sortMode === 'added_desc') list.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    }
+    return list;
+  }
+
+  function renderPlaylist() {
+    const songList = document.getElementById('songList');
+    const list = getDisplayedTracks();
+
+    if (list.length === 0) {
+      songList.innerHTML = `
+        <div class="empty-state">
+          <div style="font-size:1.4rem; margin-bottom:6px;">🎶</div>
+          <div>表示できる曲がありません</div>
+          <div style="font-size:0.76rem; margin-top:4px;">「＋ スマホ内の曲を追加」または「PCで軽量化した曲を取り込む」から追加してください</div>
+        </div>
+      `;
+      return;
+    }
+
+    songList.innerHTML = '';
+    list.forEach((t, i) => {
+      const isCurrent = t.id === currentTrackId;
+      const item = document.createElement('div');
+      item.className = 'song-item' + (isCurrent ? ' active' : '');
+
+      let rankHtml = '';
+      if (activeTab === 'rank') {
+        const rClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+        rankHtml = `<div class="rank-badge ${rClass}">${i + 1}</div>`;
+      }
+
+      const canReorder = sortMode === 'custom' && activeTab === 'all';
+
+      item.innerHTML = `
+        ${rankHtml}
+        <div class="song-left">
+          <div class="song-name">${isCurrent ? '🔊 ' : ''}${t.name}</div>
+          <div class="song-sub">
+            <span>${t.mood} (${t.bpm}BPM)</span>
+            <span>・🎧 ${t.plays || 0}回</span>
+            <span>・${formatBytes(t.size)}</span>
+          </div>
+        </div>
+        <div class="song-actions">
+          ${canReorder ? `
+            <button class="icon-btn move-up-btn" title="上へ移動">▲</button>
+            <button class="icon-btn move-down-btn" title="下へ移動">▼</button>
+          ` : ''}
+          <button class="icon-btn add-pl-btn" title="プレイリストに追加">📁+</button>
+          <button class="icon-btn fav-btn ${t.fav ? 'fav-on' : ''}" title="お気に入り">${t.fav ? '★' : '☆'}</button>
+          <button class="icon-btn del-btn" title="削除">✕</button>
+        </div>
+      `;
+
+      item.onclick = async (e) => {
+        const btn = e.target.closest('button');
+        if (btn) {
+          e.stopPropagation();
+          if (btn.classList.contains('fav-btn')) {
+            t.fav = !t.fav;
+            await saveTrackToDB(t);
+            updateCountsAndStorage();
+            updateMainFavUI();
+            renderPlaylist();
+          } else if (btn.classList.contains('del-btn')) {
+            await removeTrackById(t.id);
+          } else if (btn.classList.contains('move-up-btn')) {
+            moveTrackOrder(t.id, -1);
+          } else if (btn.classList.contains('move-down-btn')) {
+            moveTrackOrder(t.id, 1);
+          } else if (btn.classList.contains('add-pl-btn')) {
+            promptAddToPlaylist(t);
+          }
+          return;
+        }
+        playTrackById(t.id);
+      };
+      songList.appendChild(item);
+    });
+  }
+
+  function moveTrackOrder(id, delta) {
+    const idx = tracks.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    const target = idx + delta;
+    if (target < 0 || target >= tracks.length) return;
+    const temp = tracks[idx];
+    tracks[idx] = tracks[target];
+    tracks[target] = temp;
+    renderPlaylist();
+  }
+
+  async function removeTrackById(id) {
+    const idx = tracks.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    const t = tracks[idx];
+    if (t.cached) await deleteTrackFromDB(t.id);
+    if (t.url) URL.revokeObjectURL(t.url);
+    tracks.splice(idx, 1);
+    if (currentTrackId === id) {
+      audioEl.pause();
+      audioEl.src = '';
+      currentTrackId = null;
+      document.getElementById('nowTitle').textContent = '曲を選択してください';
+    }
+    updateCountsAndStorage();
+    renderPlaylist();
+  }
+
+  // Play Track
+  async function playTrackById(id) {
+    const t = tracks.find(x => x.id === id);
+    if (!t) return;
+    ensureAudioGraph();
+
+    currentTrackId = t.id;
+    t.plays = (t.plays || 0) + 1;
+    saveTrackToDB(t);
+
+    audioEl.src = t.url;
+    audioEl.playbackRate = speeds[speedIdx];
+    audioEl.play().catch(() => {});
+
+    document.getElementById('nowTitle').textContent = t.name;
+    document.getElementById('nowArtist').textContent = `${t.artist} ・ ${formatBytes(t.size)} ・ 再生 ${t.plays}回`;
+    document.getElementById('aiTagsRow').innerHTML = `
+      <span class="ai-tag">${t.mood}</span>
+      <span class="ai-tag">🥁 約${t.bpm} BPM</span>
+      <span class="ai-tag">${t.cached ? '📌 オフライン保存済' : '⚡ 直接再生'}</span>
+    `;
+
+    const artEl = document.getElementById('albumArt');
+    if (t.coverUrl) {
+      artEl.style.backgroundImage = `url(${t.coverUrl})`;
+      artEl.textContent = '';
+    } else {
+      artEl.style.backgroundImage = '';
+      artEl.textContent = '🎵';
+    }
+
+    updateMainFavUI();
+    renderLyrics(t);
+    renderPlaylist();
+    updateMediaSession(t);
+  }
+
+  function updateMainFavUI() {
+    const t = tracks.find(x => x.id === currentTrackId);
+    const btn = document.getElementById('favMainBtn');
+    if (t && t.fav) {
+      btn.textContent = '★';
+      btn.classList.add('favorited');
+    } else {
+      btn.textContent = '☆';
+      btn.classList.remove('favorited');
+    }
+  }
+
+  document.getElementById('favMainBtn').onclick = async () => {
+    const t = tracks.find(x => x.id === currentTrackId);
+    if (!t) return;
+    t.fav = !t.fav;
+    await saveTrackToDB(t);
+    updateMainFavUI();
+    updateCountsAndStorage();
+    renderPlaylist();
+  };
+
+  // Lyrics Display & Sync (.lrc timestamp support)
+  let parsedLyrics = []; // [{ time: sec | null, text }]
+
+  function renderLyrics(track) {
+    const container = document.getElementById('lyricsContent');
+    if (!track || !track.lyrics) {
+      parsedLyrics = [];
+      container.innerHTML = `<div style="color:var(--muted);">歌詞が未登録です。「✏️ 歌詞を入力 / 編集」または「📄 .lrc歌詞ファイル読込」から追加できます。</div>`;
+      return;
+    }
+    const lines = track.lyrics.split(/\r?\n/);
+    parsedLyrics = lines.map(line => {
+      const m = line.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+      if (m) {
+        return { time: parseInt(m[1], 10) * 60 + parseFloat(m[2]), text: m[3].trim() || '♪' };
+      }
+      return { time: null, text: line };
+    });
+
+    container.innerHTML = parsedLyrics
+      .map((l, idx) => `<div class="lyric-line" id="lyricLine_${idx}">${l.text || '&nbsp;'}</div>`)
+      .join('');
+  }
+
+  function syncLyricsHighlight(currentTime) {
+    if (!parsedLyrics.length) return;
+    let activeIdx = -1;
+    for (let i = 0; i < parsedLyrics.length; i++) {
+      if (parsedLyrics[i].time !== null && currentTime >= parsedLyrics[i].time) {
+        activeIdx = i;
+      }
+    }
+    if (activeIdx !== -1) {
+      document.querySelectorAll('.lyric-line').forEach((el, idx) => {
+        if (idx === activeIdx) {
+          if (!el.classList.contains('active')) {
+            el.classList.add('active');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } else {
+          el.classList.remove('active');
+        }
+      });
+    }
+  }
+
+  document.getElementById('lyricsToggleBtn').onclick = (e) => {
+    const box = document.getElementById('lyricsBox');
+    box.classList.toggle('open');
+    e.currentTarget.classList.toggle('active', box.classList.contains('open'));
+  };
+
+  document.getElementById('editLyricsBtn').onclick = async () => {
+    const t = tracks.find(x => x.id === currentTrackId);
+    if (!t) return alert('先に曲を選択してください');
+    const input = prompt('歌詞を入力してください（[00:15.00]のようなLRCタイムスタンプ形式にも対応しています）：', t.lyrics || '');
+    if (input !== null) {
+      t.lyrics = input;
+      await saveTrackToDB(t);
+      renderLyrics(t);
+    }
+  };
+
+  document.getElementById('loadLrcBtn').onclick = () => document.getElementById('lrcFileInput').click();
+  document.getElementById('lrcFileInput').onchange = async (e) => {
+    const file = e.target.files[0];
+    const t = tracks.find(x => x.id === currentTrackId);
+    if (!file || !t) return;
+    const text = await file.text();
+    t.lyrics = text;
+    await saveTrackToDB(t);
+    renderLyrics(t);
+  };
+
+  // Next / Prev Navigation
+  function playNext() {
+    const list = getDisplayedTracks();
+    if (!list.length) return;
+    if (sleepMode === -1) {
+      sleepMode = 0;
+      document.getElementById('sleepSelect').value = '0';
+      document.getElementById('statusBanner').textContent = '';
+      audioEl.pause();
+      return;
+    }
+    if (repeatMode === 'one' && currentTrackId) {
+      audioEl.currentTime = 0;
+      audioEl.play();
+      return;
+    }
+    if (isShuffle && list.length > 1) {
+      const candidates = list.filter(x => x.id !== currentTrackId);
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      if (pick) playTrackById(pick.id);
+      return;
+    }
+    const idx = list.findIndex(x => x.id === currentTrackId);
+    if (idx !== -1 && idx + 1 < list.length) {
+      playTrackById(list[idx + 1].id);
+    } else if (repeatMode === 'all') {
+      playTrackById(list[0].id);
+    }
+  }
+
+  function playPrev() {
+    const list = getDisplayedTracks();
+    if (!list.length) return;
+    if (audioEl.currentTime > 3) {
+      audioEl.currentTime = 0;
+      return;
+    }
+    const idx = list.findIndex(x => x.id === currentTrackId);
+    const prevIdx = idx > 0 ? idx - 1 : list.length - 1;
+    playTrackById(list[prevIdx].id);
+  }
+
+  // Media Session API for Android Lock Screen & Bluetooth Controls
+  function updateMediaSession(track) {
+    if (!('mediaSession' in navigator)) return;
+    const artwork = track.coverUrl ? [{ src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }] : [];
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.name,
+      artist: track.artist || 'LiteMusic AI Pro',
+      album: `${track.mood} (${formatBytes(track.size)})`,
+      artwork
+    });
+    navigator.mediaSession.setActionHandler('play', () => audioEl.play());
+    navigator.mediaSession.setActionHandler('pause', () => audioEl.pause());
+    navigator.mediaSession.setActionHandler('previoustrack', playPrev);
+    navigator.mediaSession.setActionHandler('nexttrack', playNext);
+    navigator.mediaSession.setActionHandler('seekbackward', () => { audioEl.currentTime = Math.max(0, audioEl.currentTime - 10); });
+    navigator.mediaSession.setActionHandler('seekforward', () => { audioEl.currentTime = Math.min(audioEl.duration || 0, audioEl.currentTime + 10); });
+    navigator.mediaSession.setActionHandler('seekto', (d) => { audioEl.currentTime = d.seekTime; });
+  }
+
+  // Audio Events
+  const playBtn = document.getElementById('playBtn');
+  const seekBar = document.getElementById('seekBar');
+  audioEl.onplay = () => {
+    playBtn.textContent = '⏸';
+    document.getElementById('albumArt').classList.add('playing');
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  };
+  audioEl.onpause = () => {
+    playBtn.textContent = '▶';
+    document.getElementById('albumArt').classList.remove('playing');
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  };
+  audioEl.onended = playNext;
+  audioEl.ontimeupdate = () => {
+    if (audioEl.duration) {
+      seekBar.max = audioEl.duration;
+      seekBar.value = audioEl.currentTime;
+      document.getElementById('curTime').textContent = formatTime(audioEl.currentTime);
+      document.getElementById('durTime').textContent = formatTime(audioEl.duration);
+      syncLyricsHighlight(audioEl.currentTime);
+    }
+  };
+  seekBar.oninput = () => { audioEl.currentTime = parseFloat(seekBar.value); };
+
+  playBtn.onclick = () => {
+    if (!tracks.length) {
+      document.getElementById('fileInput').click();
+      return;
+    }
+    if (!currentTrackId) playTrackById(tracks[0].id);
+    else if (audioEl.paused) { ensureAudioGraph(); audioEl.play(); }
+    else audioEl.pause();
+  };
+  document.getElementById('nextBtn').onclick = playNext;
+  document.getElementById('prevBtn').onclick = playPrev;
+  document.getElementById('rewBtn').onclick = () => { audioEl.currentTime = Math.max(0, audioEl.currentTime - 10); };
+  document.getElementById('ffBtn').onclick = () => { audioEl.currentTime = Math.min(audioEl.duration || 0, audioEl.currentTime + 10); };
+
+  document.getElementById('shuffleBtn').onclick = (e) => {
+    isShuffle = !isShuffle;
+    e.currentTarget.classList.toggle('active-mode', isShuffle);
+  };
+  document.getElementById('repeatBtn').onclick = (e) => {
+    const btn = e.currentTarget;
+    if (repeatMode === 'all') { repeatMode = 'one'; btn.textContent = '🔂'; btn.classList.add('active-mode'); }
+    else if (repeatMode === 'one') { repeatMode = 'off'; btn.textContent = '➡️'; btn.classList.remove('active-mode'); }
+    else { repeatMode = 'all'; btn.textContent = '🔁'; btn.classList.add('active-mode'); }
+  };
+  document.getElementById('speedBtn').onclick = (e) => {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    const sp = speeds[speedIdx];
+    audioEl.playbackRate = sp;
+    document.getElementById('speedLabel').textContent = `速度 ${sp}x`;
+    e.currentTarget.classList.toggle('active', sp !== 1.0);
+  };
+
+  // Drawer Toggles
+  document.querySelectorAll('[data-drawer]').forEach(btn => {
+    btn.onclick = () => {
+      const targetId = btn.getAttribute('data-drawer');
+      const panel = document.getElementById(targetId);
+      const isOpen = panel.classList.contains('open');
+      document.querySelectorAll('.drawer-panel').forEach(p => p.classList.remove('open'));
+      document.querySelectorAll('[data-drawer]').forEach(b => b.classList.remove('active'));
+      if (!isOpen) {
+        panel.classList.add('open');
+        btn.classList.add('active');
+      }
+    };
+  });
+
+  // Equalizer Events
+  document.querySelectorAll('[data-eq]').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('[data-eq]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const preset = EQ_PRESETS[btn.getAttribute('data-eq')];
+      if (preset) applyEqValues(preset.boost, preset.gains);
+    };
+  });
+
+  document.getElementById('eqBassBoost').oninput = (e) => {
+    ensureAudioGraph();
+    const v = parseInt(e.target.value, 10);
+    document.getElementById('eqValBassBoost').textContent = `+${v}dB`;
+    if (bassBoostFilter) bassBoostFilter.gain.value = v;
+  };
+
+  document.querySelectorAll('.eq-band-slider').forEach(slider => {
+    slider.oninput = (e) => {
+      ensureAudioGraph();
+      const idx = parseInt(slider.getAttribute('data-band'), 10);
+      const v = parseInt(e.target.value, 10);
+      document.getElementById('eqVal' + idx).textContent = (v > 0 ? '+' : '') + v + 'dB';
+      if (eqFilters[idx]) eqFilters[idx].gain.value = v;
+    };
+  });
+
+  // AI Auto-Mastering EQ Button (Real-Time FFT Spectrum Analysis)
+  document.getElementById('aiAutoEqBtn').onclick = () => {
+    ensureAudioGraph();
+    const t = tracks.find(x => x.id === currentTrackId);
+
+    // If audio is currently playing, measure live FFT frequency spectrum across 5 bands
+    if (analyser && !audioEl.paused) {
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(freqData);
+      const avgSlice = (start, end) => {
+        let sum = 0;
+        for (let i = start; i <= end; i++) sum += freqData[i] || 0;
+        return sum / Math.max(1, end - start + 1);
+      };
+      // 128 bins (0 - 22050Hz, ~172Hz per bin)
+      const subBass = avgSlice(0, 1);    // ~0-200Hz
+      const bass    = avgSlice(1, 3);    // ~200-500Hz
+      const mid     = avgSlice(4, 10);   // ~700-1800Hz
+      const pres    = avgSlice(15, 30);  // ~2.5k-5kHz
+      const treble  = avgSlice(45, 85);  // ~8k-15kHz
+
+      // Calculate target compensation: boost weak bass or rolled-off MP3 treble, tame muddy low-mid
+      const g60   = subBass < 140 ? 5 : 2;
+      const g250  = bass > 175 ? -2 : 1;
+      const g1k   = mid < 120 ? 3 : 1;
+      const g4k   = pres < 100 ? 5 : 3;
+      const g14k  = treble < 65 ? 8 : 5; // Restore high frequencies lost in compression
+      const boost = subBass < 130 ? 6 : 4;
+
+      applyEqValues(boost, [g60, g250, g1k, g4k, g14k]);
+      document.getElementById('statusBanner').textContent =
+        `✨ 実測スペクトラム補正完了 (低域:${Math.round(subBass)} / 中域:${Math.round(mid)} / 高域:${Math.round(treble)})`;
+      return;
+    }
+
+    // Fallback when paused: use decoded track energy & compression ratio
+    const isHighlyCompressed = t && t.size < 2.2 * 1024 * 1024;
+    const boost = t && t.bpm >= 125 ? 6 : 4;
+    const gains = isHighlyCompressed ? [4, 1, 2, 5, 8] : [5, 2, 1, 4, 5];
+    applyEqValues(boost, gains);
+    document.getElementById('statusBanner').textContent = '✨ 曲の波形データから高音域と重低音を自動最適化しました';
+  };
+
+  // On-Device AI DJ Logic
+  function runAiDj(mode, customPrompt = '') {
+    const box = document.getElementById('aiResponseBox');
+    box.style.display = 'block';
+    if (!tracks.length) {
+      box.textContent = '🤖 先に曲を1曲以上追加してください！';
+      return;
+    }
+
+    activeTab = 'all';
+    sortMode = 'custom';
+    document.getElementById('sortSelect').value = 'custom';
+    document.querySelectorAll('.lib-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === 'all'));
+
+    if (mode === 'energetic' || /元気|テンション|朝|アップ|作業|運動|ドライブ/.test(customPrompt)) {
+      tracks.sort((a, b) => (b.bpm + b.energy) - (a.bpm + a.energy));
+      box.innerHTML = `🤖 <strong>AI DJ 選曲完了：</strong> BPM（テンポ）と音響エネルギーが高い順に並び替え、重低音ブーストEQを適用しました！`;
+      applyEqValues(6, [5, 3, 0, 3, 5]);
+    } else if (mode === 'chill' || /寝|夜|リラックス|静か|チル|勉強|休/.test(customPrompt)) {
+      tracks.sort((a, b) => (a.bpm + a.energy) - (b.bpm + b.energy));
+      box.innerHTML = `🤖 <strong>AI DJ 選曲完了：</strong> 穏やかなテンポの曲から順番に並べ、聴き疲れしないナイトモードEQに設定しました。`;
+      applyEqValues(2, [2, 1, 0, -2, -4]);
+    } else if (mode === 'similar') {
+      const cur = tracks.find(x => x.id === currentTrackId) || tracks[0];
+      tracks.sort((a, b) => Math.abs(a.bpm - cur.bpm) - Math.abs(b.bpm - cur.bpm));
+      box.innerHTML = `🤖 <strong>AI DJ 選曲完了：</strong> 「${cur.name}」（約${cur.bpm}BPM）とテンポや雰囲気が近い順にプレイリストを再構成しました！`;
+    } else if (mode === 'rediscover' || /隠れ|あまり|久々|ランダム/.test(customPrompt)) {
+      tracks.sort((a, b) => (a.plays || 0) - (b.plays || 0));
+      box.innerHTML = `🤖 <strong>AI DJ 選曲完了：</strong> まだ再生回数が少ない「隠れた名曲」を優先してピックアップしました！`;
+    } else {
+      tracks.sort((a, b) => (b.fav ? 10 : 0) + (b.energy || 50) - ((a.fav ? 10 : 0) + (a.energy || 50)));
+      box.innerHTML = `🤖 <strong>AI DJ 選曲完了：</strong> 「${customPrompt}」に合わせてお気に入り曲とムード解析から最適な曲順を構成しました！`;
+    }
+
+    renderPlaylist();
+    if (tracks.length > 0) playTrackById(tracks[0].id);
+  }
+
+  document.querySelectorAll('[data-ai]').forEach(btn => {
+    btn.onclick = () => runAiDj(btn.getAttribute('data-ai'));
+  });
+  document.getElementById('aiAskBtn').onclick = () => {
+    const val = document.getElementById('aiCustomInput').value.trim();
+    if (val) runAiDj('custom', val);
+  };
+
+  // Wake-up Alarm & Sleep Timer
+  let alarmActive = false;
+  let alarmTimeStr = '07:00';
+  let sleepMode = 0;
+  let sleepTimerId = null;
+
+  document.getElementById('toggleAlarmBtn').onclick = (e) => {
+    alarmActive = !alarmActive;
+    alarmTimeStr = document.getElementById('alarmTimeInput').value || '07:00';
+    const btn = e.currentTarget;
+    if (alarmActive) {
+      btn.textContent = `⏰ ${alarmTimeStr} アラーム待機中 (タップで解除)`;
+      btn.classList.add('active');
+      document.getElementById('alarmBadge').textContent = `⏰ ${alarmTimeStr}`;
+      if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {});
+    } else {
+      btn.textContent = 'アラームをONにする';
+      btn.classList.remove('active');
+      document.getElementById('alarmBadge').textContent = '';
+    }
+  };
+
+  setInterval(() => {
+    if (!alarmActive) return;
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    if (`${hh}:${mm}` === alarmTimeStr && now.getSeconds() < 3) {
+      alarmActive = false;
+      document.getElementById('toggleAlarmBtn').textContent = 'アラームをONにする';
+      document.getElementById('toggleAlarmBtn').classList.remove('active');
+      document.getElementById('alarmBadge').textContent = '☀️ おはようございます！';
+      // Gentle Fade-in Playback
+      if (tracks.length > 0) {
+        audioEl.volume = 0.05;
+        if (!currentTrackId) playTrackById(tracks[0].id);
+        else audioEl.play();
+        let vol = 0.05;
+        const fade = setInterval(() => {
+          vol = Math.min(1.0, vol + 0.05);
+          audioEl.volume = vol;
+          if (vol >= 1.0) clearInterval(fade);
+        }, 1200);
+      }
+    }
+  }, 1000);
+
+  document.getElementById('sleepSelect').onchange = (e) => {
+    sleepMode = parseInt(e.target.value, 10);
+    if (sleepTimerId) clearTimeout(sleepTimerId);
+    const banner = document.getElementById('statusBanner');
+
+    if (sleepMode > 0) {
+      banner.textContent = `🌙 ${sleepMode}分後にフェードアウト停止`;
+      sleepTimerId = setTimeout(() => {
+        // Gentle fade out over 5 seconds
+        let v = audioEl.volume;
+        const fadeOut = setInterval(() => {
+          v = Math.max(0, v - 0.1);
+          audioEl.volume = v;
+          if (v <= 0) {
+            clearInterval(fadeOut);
+            audioEl.pause();
+            audioEl.volume = 1.0;
+            banner.textContent = '';
+          }
+        }, 400);
+      }, sleepMode * 60 * 1000);
+    } else if (sleepMode === -1) {
+      banner.textContent = '🌙 この曲の終わりで停止';
+    } else {
+      banner.textContent = '';
+    }
+  };
+
+  // Library Tabs & Custom Playlists
+  document.querySelectorAll('.lib-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.lib-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeTab = tab.getAttribute('data-tab');
+      document.getElementById('customPlBar').classList.toggle('show', activeTab === 'playlist');
+      renderPlaylist();
+    };
+  });
+
+  function renderCustomPlSelect() {
+    const sel = document.getElementById('activePlSelect');
+    const names = Object.keys(playlists);
+    if (!names.length) {
+      playlists['マイリスト'] = [];
+      savePlaylists();
+    }
+    sel.innerHTML = Object.keys(playlists)
+      .map(n => `<option value="${n}" ${n === currentPlName ? 'selected' : ''}>📁 ${n} (${playlists[n].length}曲)</option>`)
+      .join('');
+  }
+
+  document.getElementById('activePlSelect').onchange = (e) => {
+    currentPlName = e.target.value;
+    renderPlaylist();
+  };
+
+  document.getElementById('newPlBtn').onclick = () => {
+    const name = prompt('新しいプレイリスト名を入力してください（例：ドライブ用、語学学習など）：');
+    if (name && name.trim()) {
+      playlists[name.trim()] = [];
+      currentPlName = name.trim();
+      savePlaylists();
+      renderCustomPlSelect();
+      renderPlaylist();
+    }
+  };
+
+  document.getElementById('delPlBtn').onclick = () => {
+    if (!confirm(`プレイリスト「${currentPlName}」を削除しますか？（曲自体は消えません）`)) return;
+    delete playlists[currentPlName];
+    currentPlName = Object.keys(playlists)[0] || '';
+    savePlaylists();
+    renderCustomPlSelect();
+    renderPlaylist();
+  };
+
+  function promptAddToPlaylist(track) {
+    const names = Object.keys(playlists);
+    const msg = `「${track.name}」を追加するプレイリスト名を入力してください：\n（現在あるリスト: ${names.join(' / ')}）`;
+    const target = prompt(msg, currentPlName || names[0] || 'お気に入りリスト');
+    if (!target || !target.trim()) return;
+    const key = target.trim();
+    if (!playlists[key]) playlists[key] = [];
+    if (!playlists[key].includes(track.id)) {
+      playlists[key].push(track.id);
+      savePlaylists();
+      renderCustomPlSelect();
+      document.getElementById('statusBanner').textContent = `📁 「${key}」に追加しました`;
+    }
+  }
+
+  document.getElementById('sortSelect').onchange = (e) => {
+    sortMode = e.target.value;
+    renderPlaylist();
+  };
+  document.getElementById('searchInput').oninput = renderPlaylist;
+
+  document.getElementById('clearCacheBtn').onclick = async () => {
+    if (!confirm('アプリ内に保存したオフライン曲キャッシュをすべて削除してスマホの容量を空けますか？')) return;
+    await clearAllDB();
+    audioEl.pause();
+    audioEl.src = '';
+    tracks = [];
+    currentTrackId = null;
+    updateCountsAndStorage();
+    renderPlaylist();
+  };
+
+  document.getElementById('addFilesBtn').onclick = () => document.getElementById('fileInput').click();
+  document.getElementById('addFolderBtn').onclick = () => document.getElementById('folderInput').click();
+  document.getElementById('fileInput').onchange = (e) => handleFiles(e.target.files);
+  document.getElementById('folderInput').onchange = (e) => handleFiles(e.target.files);
+
+  // Transfer Modal Logic
+  const transferModal = document.getElementById('transferModal');
+  document.getElementById('openTransferModalBtn').onclick = async () => {
+    transferModal.style.display = 'flex';
+    let qrTargetUrl = 'https://naisanankuru135-max.github.io/litemusic-ai-pro/?pc=192.168.0.13:3456';
+    try {
+      const res = await fetch('/api/info');
+      const info = await res.json();
+      if (info.githubQrUrl) {
+        qrTargetUrl = info.githubQrUrl;
+      }
+    } catch (e) {}
+    document.getElementById('transferWifiUrls').innerHTML = `
+      <div style="margin-bottom:4px;"><a href="${qrTargetUrl}" target="_blank" style="color:var(--accent);">${qrTargetUrl}</a></div>
+    `;
+    document.getElementById('qrContainer').innerHTML = `
+      <div style="background:#fff; padding:10px; border-radius:12px; text-align:center;">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(qrTargetUrl)}" alt="QR Code" width="160" height="160" style="display:block;" onerror="this.parentElement.style.display='none'">
+        <div style="color:#0f172a; font-size:0.72rem; font-weight:700; margin-top:4px;">📱 スマホのカメラでスキャン</div>
+      </div>
+    `;
+  };
+  document.getElementById('closeTransferModalBtn').onclick = () => {
+    transferModal.style.display = 'none';
+  };
+  document.getElementById('modalOpenFolderBtn').onclick = async () => {
+    await fetch('/api/open-folder', { method: 'POST' });
+  };
+
+  init();
+</script>
+</body>
+</html>
