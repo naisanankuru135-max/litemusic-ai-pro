@@ -1376,97 +1376,141 @@
     const params = new URLSearchParams(location.search);
     const syncToken = params.get('sync') || params.get('pc');
     if (syncToken) {
-      let bridgeHost = syncToken;
-      try {
-        // Support base64url encoded token so raw IP isn't even visible in the URL
-        if (!syncToken.includes(':') && !syncToken.includes('.')) {
-          bridgeHost = atob(syncToken.replace(/-/g, '+').replace(/_/g, '/'));
-        }
-      } catch (e) {}
-      // Clean URL bar immediately so ?sync=... disappears
-      try {
-        history.replaceState({}, document.title, location.pathname);
-      } catch (e) {}
-
+      const target = decodeSyncTarget(syncToken);
+      try { history.replaceState({}, document.title, location.pathname); } catch (e) {}
       const bar = document.getElementById('pcSyncBar');
       const btn = document.getElementById('syncFromPcBtn');
       bar.style.display = 'grid';
       btn.textContent = '📥 PCから曲をまとめて受け取る（タップして開始）';
-      btn.onclick = () => startBridgeImport(bridgeHost);
+      btn.onclick = () => startBridgeImport(target);
     }
   }
 
-  async function startBridgeImport(bridgeHost) {
-    const cleanHost = bridgeHost.trim().replace(/\/.*$/, '');
-    const btn = document.getElementById('syncFromPcBtn');
-    const bar = document.getElementById('pcSyncBar');
+  // Decode QR sync token -> { lan, tunnel }
+  function decodeSyncTarget(token) {
+    let raw = token;
+    try {
+      raw = atob(token.replace(/-/g, '+').replace(/_/g, '/'));
+    } catch (e) {
+      return { lan: null, tunnel: token.includes('.') ? token : null, raw: token };
+    }
+    if (raw.trim().startsWith('{')) {
+      try { return JSON.parse(raw); } catch (e) {}
+    }
+    return { lan: raw.includes(':') ? raw : null, tunnel: raw.includes('.') ? raw : null, raw };
+  }
 
-    // If bridgeHost is an HTTPS tunnel (or domain without port), fetch directly over HTTPS!
-    const isHttpsTunnel = cleanHost.startsWith('https://') || (!cleanHost.includes(':') && cleanHost.includes('.'));
-    if (isHttpsTunnel) {
-      const baseUrl = cleanHost.startsWith('http') ? cleanHost : `https://${cleanHost}`;
-      try {
-        btn.textContent = '📲 PCに接続しています...';
-        btn.disabled = true;
-        const res = await fetch(`${baseUrl}/api/info`);
-        const info = await res.json();
-        const files = (info.convertedFiles || []).filter(f => !f.name.endsWith('.html'));
-        if (!files.length) {
-          btn.textContent = 'PC側に曲がありません';
-          btn.disabled = false;
-          return;
-        }
-        const persist = document.getElementById('persistCheckbox').checked;
-        for (let i = 0; i < files.length; i++) {
-          const f = files[i];
-          btn.textContent = `📥 受信中... (${i + 1} / ${files.length}曲) ${f.name.slice(0, 18)}`;
-          const id = f.name + '_' + f.size;
-          if (tracks.some(t => t.id === id)) continue;
-          try {
-            const audioRes = await fetch(`${baseUrl}${f.url}`);
-            if (!audioRes.ok) continue;
-            const blob = await audioRes.blob();
-            const meta = await parseID3Metadata(blob, f.name);
-            const prof = await analyzeAudioBlob(blob, meta.title);
-            const trackObj = {
-              id,
-              name: meta.title,
-              artist: meta.artist,
-              coverUrl: meta.coverUrl,
-              size: blob.size,
-              url: URL.createObjectURL(blob),
-              blob: persist ? blob : null,
-              cached: persist,
-              fav: false,
-              plays: 0,
-              lyrics: meta.lyrics || '',
-              bpm: prof.bpm,
-              energy: prof.energy,
-              mood: prof.mood,
-              addedAt: Date.now()
-            };
-            if (persist) await saveTrackToDB(trackObj);
-            tracks.push(trackObj);
-            updateCountsAndStorage();
-            renderPlaylist();
-          } catch (trackErr) {
-            console.warn('Track skip:', trackErr);
-          }
-        }
-        document.getElementById('statusBanner').textContent = `🎉 全 ${files.length} 曲の取り込み完了！オフラインで聴けます`;
-        btn.textContent = `✅ 全 ${files.length} 曲の受信が完了しました！`;
-        setTimeout(() => { if (bar) bar.style.display = 'none'; }, 3000);
-        if (!currentTrackId && tracks.length > 0) playTrackById(tracks[0].id);
-      } catch (err) {
-        btn.textContent = `⚠️ 接続エラー (${err.message || '再試行'}) - タップで再試行`;
-        btn.disabled = false;
-      }
+  function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { signal: ctrl.signal, cache: 'no-store' })
+      .finally(() => clearTimeout(timer));
+  }
+
+  async function probeHost(base, ms) {
+    const t0 = Date.now();
+    try {
+      const res = await fetchWithTimeout(`${base}/api/info?_=${t0}`, ms);
+      if (!res.ok) return null;
+      const info = await res.json();
+      return { base, info, ms: Date.now() - t0 };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function startBridgeImport(target) {
+    const btn = document.getElementById('syncFromPcBtn');
+    const banner = document.getElementById('statusBanner');
+    const candidates = [];
+    if (target.lan) candidates.push({ label: '同じWi-Fi（高速）', base: `http://${target.lan}` });
+    if (target.ts) candidates.push({ label: 'Tailscale経由', base: `http://${target.ts}` });
+    if (target.tunnel) candidates.push({ label: 'インターネット経由（低速）', base: `https://${target.tunnel}` });
+
+    let chosen = null;
+    for (const c of candidates) {
+      btn.disabled = true;
+      btn.textContent = `📡 ${c.label} に接続を確認中...`;
+      const probe = await probeHost(c.base, 5000);
+      if (probe) { chosen = { ...c, ...probe }; break; }
+    }
+
+    if (!chosen) {
+      btn.disabled = false;
+      btn.textContent = '⚠️ PCに接続できません（タップで再試行）';
+      banner.textContent = 'このWi-Fiは端末間通信が遮断されている可能性があります。「☁️ ドライブから追加」をお使いください';
       return;
     }
 
-    const plainHost = cleanHost.replace(/^https?:\/\//, '');
-    btn.textContent = '📲 PCから曲を転送中...';
-    window.open(`http://${plainHost}/bridge`, '_blank');
+    btn.disabled = true;
+    await importFromBase(chosen.base, chosen.info, btn, banner);
+    btn.disabled = false;
+  }
+
+  async function importFromBase(baseUrl, info, btn, banner) {
+    const files = (info.convertedFiles || []).filter(f => !f.name.endsWith('.html'));
+    const persist = document.getElementById('persistCheckbox').checked;
+    if (!files.length) {
+      btn.textContent = 'PC側に曲がありません';
+      return;
+    }
+
+    let ok = 0;
+    const failed = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const id = f.name + '_' + f.size;
+      if (tracks.some(t => t.id === id)) { ok++; continue; }
+
+      btn.textContent = `📥 受信中... (${i + 1} / ${files.length}曲) ${formatBytes(f.size)}`;
+      banner.textContent = `${i + 1}/${files.length}: ${f.name.slice(0, 26)}`;
+      const t0 = Date.now();
+      try {
+        const res = await fetchWithTimeout(`${baseUrl}${f.url}`, 45000);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        if (!blob.size) throw new Error('0 byte');
+        const speed = Math.round(blob.size / 1024 / Math.max(0.001, (Date.now() - t0) / 1000));
+
+        const meta = await parseID3Metadata(blob, f.name);
+        const prof = await analyzeAudioBlob(blob, meta.title);
+        const trackObj = {
+          id,
+          name: meta.title,
+          artist: meta.artist,
+          coverUrl: meta.coverUrl,
+          size: blob.size,
+          url: URL.createObjectURL(blob),
+          blob: persist ? blob : null,
+          cached: persist,
+          fav: false,
+          plays: 0,
+          lyrics: meta.lyrics || '',
+          bpm: prof.bpm,
+          energy: prof.energy,
+          mood: prof.mood,
+          addedAt: Date.now()
+        };
+        if (persist) await saveTrackToDB(trackObj);
+        tracks.push(trackObj);
+        ok++;
+        updateCountsAndStorage();
+        renderPlaylist();
+        banner.textContent = `${i + 1}/${files.length} 完了 (${speed} KB/s)`;
+      } catch (err) {
+        failed.push(f.name);
+        banner.textContent = `⚠️ ${f.name.slice(0, 20)} をスキップ（接続が遅い/切れました）`;
+      }
+    }
+
+    if (failed.length === 0) {
+      btn.textContent = `✅ 全 ${ok} 曲の取り込みが完了しました！`;
+      banner.textContent = '🎉 完了！外でも完全オフラインで聴けます';
+    } else {
+      btn.textContent = `⚠️ ${ok}曲成功 / ${failed.length}曲失敗（タップで再試行）`;
+      banner.textContent = '接続が不安定です。「☁️ ドライブから追加」の方が確実です';
+    }
+    if (!currentTrackId && tracks.length > 0) playTrackById(tracks[0].id);
   }
 
   window.addEventListener('message', async (e) => {
@@ -1532,54 +1576,92 @@
     document.getElementById('cntFav').textContent = tracks.filter(t => t.fav).length;
   }
 
-  // Built-in Zero-Dependency ZIP Extractor (supports Store & Deflate + UTF-8 filenames)
-  async function extractAudioFromZip(zipFile) {
-    const extracted = [];
+  // Memory-safe ZIP reader: reads only the central directory + each entry on demand.
+  // (Never loads the whole archive into RAM, so a 130MB ZIP works fine on Android.)
+  async function readZipSlice(blob, start, end) {
+    return new Uint8Array(await blob.slice(start, end).arrayBuffer());
+  }
+
+  function decodeZipName(bytes, isUtf8) {
     try {
-      const buf = await zipFile.arrayBuffer();
-      const view = new DataView(buf);
-      let offset = 0;
-      while (offset + 30 <= buf.byteLength) {
-        const sig = view.getUint32(offset, true);
-        if (sig !== 0x04034b50) break; // Local file header signature
-        const flags = view.getUint16(offset + 6, true);
-        const method = view.getUint16(offset + 8, true);
-        const compSize = view.getUint32(offset + 18, true);
-        const nameLen = view.getUint16(offset + 26, true);
-        const extraLen = view.getUint16(offset + 28, true);
-
-        const nameBytes = new Uint8Array(buf, offset + 30, nameLen);
-        const isUtf8 = (flags & 0x0800) !== 0;
-        const rawName = new TextDecoder(isUtf8 ? 'utf-8' : 'shift-jis').decode(nameBytes);
-        const dataStart = offset + 30 + nameLen + extraLen;
-        const dataEnd = dataStart + compSize;
-        if (dataEnd > buf.byteLength) break;
-
-        const cleanName = rawName.split('/').pop();
-        if (cleanName && !cleanName.startsWith('.') && /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(cleanName)) {
-          const slice = buf.slice(dataStart, dataEnd);
-          let fileBlob = null;
-          const ext = cleanName.split('.').pop().toLowerCase();
-          const mime = (ext === 'ogg' || ext === 'opus') ? 'audio/ogg' : 'audio/mpeg';
-
-          if (method === 0) {
-            fileBlob = new Blob([slice], { type: mime });
-          } else if (method === 8 && typeof DecompressionStream !== 'undefined') {
-            const ds = new DecompressionStream('deflate-raw');
-            const stream = new Blob([slice]).stream().pipeThrough(ds);
-            fileBlob = await new Response(stream).blob();
-            fileBlob = new Blob([fileBlob], { type: mime });
-          }
-          if (fileBlob) {
-            extracted.push(new File([fileBlob], cleanName, { type: mime }));
-          }
-        }
-        offset = dataEnd;
-      }
+      return new TextDecoder(isUtf8 ? 'utf-8' : 'shift-jis').decode(bytes);
     } catch (e) {
-      console.warn('ZIP extract error:', e);
+      return new TextDecoder('utf-8').decode(bytes);
     }
-    return extracted;
+  }
+
+  async function listZipEntries(zipBlob) {
+    const tailLen = Math.min(zipBlob.size, 65557);
+    const tail = await readZipSlice(zipBlob, zipBlob.size - tailLen, zipBlob.size);
+    const dv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+    let eocd = -1;
+    for (let i = tail.length - 22; i >= 0; i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) return null;
+    const total = dv.getUint16(eocd + 10, true);
+    const cdSize = dv.getUint32(eocd + 12, true);
+    const cdOffset = dv.getUint32(eocd + 16, true);
+    if (!cdSize || cdOffset + cdSize > zipBlob.size) return null;
+
+    const cd = await readZipSlice(zipBlob, cdOffset, cdOffset + cdSize);
+    const cdv = new DataView(cd.buffer, cd.byteOffset, cd.byteLength);
+    const entries = [];
+    let p = 0;
+    for (let i = 0; i < total && p + 46 <= cd.length; i++) {
+      if (cdv.getUint32(p, true) !== 0x02014b50) break;
+      const flags = cdv.getUint16(p + 8, true);
+      const method = cdv.getUint16(p + 10, true);
+      const compSize = cdv.getUint32(p + 20, true);
+      const nameLen = cdv.getUint16(p + 28, true);
+      const extraLen = cdv.getUint16(p + 30, true);
+      const commentLen = cdv.getUint16(p + 32, true);
+      const localOffset = cdv.getUint32(p + 42, true);
+      const name = decodeZipName(cd.subarray(p + 46, p + 46 + nameLen), (flags & 0x0800) !== 0);
+      if (name && !name.endsWith('/')) {
+        entries.push({ name, method, compSize, localOffset });
+      }
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+  }
+
+  async function extractAudioFromZip(zipBlob, onProgress) {
+    const out = [];
+    const entries = await listZipEntries(zipBlob);
+    if (!entries) return out;
+    const audio = entries.filter(e => /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(e.name));
+
+    for (let i = 0; i < audio.length; i++) {
+      const e = audio[i];
+      const cleanName = e.name.split('/').pop();
+      if (onProgress) onProgress(i + 1, audio.length, cleanName);
+      try {
+        const lh = await readZipSlice(zipBlob, e.localOffset, e.localOffset + 30);
+        const ldv = new DataView(lh.buffer, lh.byteOffset, lh.byteLength);
+        const nameLen = ldv.getUint16(26, true);
+        const extraLen = ldv.getUint16(28, true);
+        const dataStart = e.localOffset + 30 + nameLen + extraLen;
+        const rawSlice = zipBlob.slice(dataStart, dataStart + e.compSize);
+
+        const ext = cleanName.split('.').pop().toLowerCase();
+        const mime = (ext === 'ogg' || ext === 'opus') ? 'audio/ogg' : 'audio/mpeg';
+        let blob = null;
+
+        if (e.method === 0) {
+          blob = new Blob([rawSlice], { type: mime });
+        } else if (e.method === 8 && typeof DecompressionStream !== 'undefined') {
+          const stream = rawSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'));
+          blob = new Blob([await new Response(stream).blob()], { type: mime });
+        }
+        if (blob && blob.size > 0) {
+          out.push(new File([blob], cleanName, { type: mime }));
+        }
+      } catch (err) {
+        console.warn('ZIP entry failed:', cleanName, err);
+      }
+    }
+    return out;
   }
 
   async function handleFiles(fileList) {
@@ -1589,8 +1671,10 @@
 
     for (const f of rawFiles) {
       if (/\.zip$/i.test(f.name) || f.type === 'application/zip' || f.type === 'application/x-zip-compressed') {
-        document.getElementById('statusBanner').textContent = `📦 ZIPパック「${f.name}」を展開中...`;
-        const unpacked = await extractAudioFromZip(f);
+        document.getElementById('statusBanner').textContent = `📦 ZIPパック「${f.name}」を読み取り中...`;
+        const unpacked = await extractAudioFromZip(f, (n, total, name) => {
+          document.getElementById('statusBanner').textContent = `📦 ZIP展開中... (${n} / ${total}) ${name.slice(0, 20)}`;
+        });
         audioFiles.push(...unpacked);
       } else if (f.type.startsWith('audio/') || /\.(mp3|ogg|opus|m4a|wav|flac|aac)$/i.test(f.name)) {
         audioFiles.push(f);
