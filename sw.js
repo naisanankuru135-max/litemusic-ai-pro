@@ -1,4 +1,4 @@
-const CACHE_NAME = 'litemusic-pwa-v6';
+const CACHE_NAME = 'litemusic-pwa-v8';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
