@@ -1432,6 +1432,8 @@
     const banner = document.getElementById('statusBanner');
     const candidates = [];
     if (target.same) candidates.push({ label: 'このページのサーバー', base: location.origin });
+    // HTTPS pages can't fetch http:// addresses (mixed content), so prefer the tailnet HTTPS host.
+    if (target.https) candidates.push({ label: 'Tailscale（暗号化・高速）', base: `https://${target.https}` });
     if (target.lan) candidates.push({ label: '同じWi-Fi（高速）', base: `http://${target.lan}` });
     if (target.ts) candidates.push({ label: 'Tailscale経由', base: `http://${target.ts}` });
     if (target.tunnel) candidates.push({ label: 'インターネット経由（低速）', base: `https://${target.tunnel}` });
