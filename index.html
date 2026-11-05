@@ -1383,6 +1383,14 @@
       bar.style.display = 'grid';
       btn.textContent = '📥 PCから曲をまとめて受け取る（タップして開始）';
       btn.onclick = () => startBridgeImport(target);
+    } else if (!/github\.io$/i.test(location.hostname) && location.protocol !== 'file:') {
+      // Opened directly from the PC's own server (LAN / Tailscale HTTPS):
+      // same-origin transfer, no IP or token needed.
+      const bar = document.getElementById('pcSyncBar');
+      const btn = document.getElementById('syncFromPcBtn');
+      bar.style.display = 'grid';
+      btn.textContent = '📥 PCから曲をまとめて受け取る（タップして開始）';
+      btn.onclick = () => startBridgeImport({ same: true });
     }
   }
 
@@ -1423,6 +1431,7 @@
     const btn = document.getElementById('syncFromPcBtn');
     const banner = document.getElementById('statusBanner');
     const candidates = [];
+    if (target.same) candidates.push({ label: 'このページのサーバー', base: location.origin });
     if (target.lan) candidates.push({ label: '同じWi-Fi（高速）', base: `http://${target.lan}` });
     if (target.ts) candidates.push({ label: 'Tailscale経由', base: `http://${target.ts}` });
     if (target.tunnel) candidates.push({ label: 'インターネット経由（低速）', base: `https://${target.tunnel}` });
