@@ -1,4 +1,4 @@
-const CACHE_NAME = 'litemusic-pwa-v10';
+const CACHE_NAME = 'litemusic-pwa-v11';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -15,19 +15,55 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// Never store music files or API responses in the cache:
+// the tracks already live in IndexedDB, so caching them here would double the phone's storage use.
+function isBypass(req, url) {
+  return (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/converted/') ||
+    req.destination === 'audio' ||
+    req.destination === 'video'
+  );
+}
+
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  let url;
+  try { url = new URL(req.url); } catch (err) { return; }
+  if (url.origin !== self.location.origin) return; // Google Drive etc. -> straight to network
+  if (isBypass(req, url)) return;                  // music / API -> straight to network
+
+  // App shell: serve from cache instantly (works with Tailscale off / no network),
+  // and refresh it in the background when we are online.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      caches.match(req).then((cached) => {
+        const network = fetch(req)
+          .then((res) => {
+            if (res && res.status === 200) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+            }
+            return res;
+          })
+          .catch(() => null);
+        return cached || network.then((res) => res || caches.match('./') || caches.match('./index.html'));
+      })
+    );
+    return;
+  }
+
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then((res) => {
         if (res && res.status === 200) {
           const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+          caches.open(CACHE_NAME).then((c) => c.put(req, clone));
         }
         return res;
       })
-      .catch(() =>
-        caches.match(e.request).then((r) => r || caches.match('./') || caches.match('./index.html'))
-      )
+      .catch(() => caches.match(req))
   );
 });
